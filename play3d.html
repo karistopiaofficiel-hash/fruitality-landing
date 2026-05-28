@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#0b0b10" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<title>FRUITALITY — 3D Prototype</title>
+<style>
+  :root{
+    --bg:#06060a; --ink:#fff; --ink-dim:#b8b8c4;
+    --juice-melon:#e13c5a; --juice-banana:#f9d43a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;height:100%;overflow:hidden;touch-action:none;}
+  canvas#three{display:block;position:fixed;inset:0;}
+  /* HUD */
+  .hud{position:fixed;pointer-events:none;z-index:10;}
+  .hud.top{top:0;left:0;right:0;padding:.8rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;}
+  .hp-block{flex:1 1 220px;max-width:320px;}
+  .hp-label{font-size:.62rem;letter-spacing:.18em;color:var(--ink-dim);text-transform:uppercase;margin-bottom:4px;text-shadow:0 1px 3px rgba(0,0,0,.8);}
+  .hp-bar{height:14px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;border:1px solid rgba(255,255,255,.12);}
+  .hp-fill{height:100%;width:100%;border-radius:999px;transition:width .18s ease-out;box-shadow:0 0 12px currentColor;}
+  .combo-center{flex:0 0 auto;text-align:center;min-width:140px;}
+  .combo-rank{font-weight:900;font-size:clamp(1.5rem,4vw,2.2rem);letter-spacing:-.02em;color:var(--juice-banana);text-shadow:0 2px 8px rgba(0,0,0,.9);line-height:1;transition:transform .15s,color .2s;}
+  .combo-rank.beat{transform:scale(1.18);}
+  .combo-points{font-size:.65rem;letter-spacing:.18em;color:var(--ink-dim);text-transform:uppercase;margin-top:4px;}
+  .banner{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);opacity:0;font-size:clamp(2.5rem,9vw,5rem);font-weight:900;letter-spacing:-.03em;color:var(--juice-melon);text-shadow:0 4px 30px rgba(225,60,90,.6),0 4px 12px rgba(0,0,0,.9);z-index:20;pointer-events:none;transition:opacity .25s,transform .35s cubic-bezier(.16,1.4,.43,1);text-align:center;}
+  .banner.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+  .banner small{display:block;font-size:.4em;font-weight:700;letter-spacing:.2em;color:var(--ink-dim);margin-top:.2em;}
+  /* Touch controls */
+  .touch-controls{position:fixed;left:0;right:0;bottom:0;pointer-events:none;z-index:11;padding:1rem;display:none;}
+  @media (pointer:coarse),(max-width:820px){.touch-controls{display:block;}}
+  .joystick{position:absolute;left:1.5rem;bottom:1.5rem;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.14);pointer-events:auto;touch-action:none;}
+  .joystick__nub{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(225,60,90,.55);border:2px solid rgba(255,255,255,.5);transition:transform .05s linear;}
+  .btn-attack,.btn-fruitality{position:absolute;right:1.5rem;width:96px;height:96px;border-radius:50%;border:3px solid rgba(255,255,255,.7);font-weight:900;font-size:1.6rem;color:#fff;cursor:pointer;pointer-events:auto;touch-action:none;transition:transform .05s,background-color .15s;display:flex;align-items:center;justify-content:center;}
+  .btn-attack{bottom:1.5rem;background:rgba(249,212,58,.6);}
+  .btn-attack:active{transform:scale(.92);}
+  .btn-fruitality{bottom:calc(1.5rem + 110px);background:rgba(225,60,90,.7);width:80px;height:80px;right:calc(1.5rem + 8px);font-size:1rem;opacity:0;pointer-events:none;transition:opacity .2s,transform .05s,box-shadow .15s;}
+  .btn-fruitality.ready{opacity:1;pointer-events:auto;animation:pulse .8s ease-in-out infinite alternate;}
+  @keyframes pulse{from{box-shadow:0 0 0 0 rgba(225,60,90,.6);}to{box-shadow:0 0 20px 12px rgba(225,60,90,.05);}}
+  .btn-fruitality:active{transform:scale(.92);}
+  /* Overlay */
+  .overlay{position:fixed;inset:0;background:rgba(7,7,12,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1rem;text-align:center;transition:opacity .3s;overflow-y:auto;}
+  .overlay.hidden{opacity:0;pointer-events:none;}
+  .overlay h1{font-size:clamp(2.4rem,8vw,4.5rem);letter-spacing:-.04em;margin:0;font-weight:900;color:var(--juice-melon);text-shadow:0 4px 30px rgba(0,0,0,.7);}
+  .overlay p{color:var(--ink-dim);max-width:480px;margin:.5rem 0 1.5rem;font-size:1rem;line-height:1.5;}
+  .overlay .controls{max-width:440px;margin:1rem 0 2rem;color:var(--ink);font-size:.9rem;text-align:left;display:grid;grid-template-columns:auto 1fr;gap:.3rem 1rem;background:rgba(255,255,255,.04);padding:1rem 1.25rem;border-radius:12px;border:1px solid rgba(255,255,255,.08);}
+  .overlay .controls kbd{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;padding:2px 6px;background:rgba(255,255,255,.1);border-radius:6px;border:1px solid rgba(255,255,255,.16);}
+  .overlay button{padding:1rem 1.8rem;border-radius:14px;border:none;background:var(--juice-melon);color:#fff;font-weight:800;font-size:1.05rem;cursor:pointer;letter-spacing:.02em;transition:transform .1s,background-color .15s,box-shadow .15s;box-shadow:0 12px 28px -10px rgba(225,60,90,.7);}
+  .overlay button:hover{background:#f24c6c;transform:translateY(-1px);}
+  .overlay button:active{transform:translateY(0) scale(.98);}
+  .overlay .secondary{background:transparent;color:var(--ink-dim);border:1px solid rgba(255,255,255,.18);box-shadow:none;}
+  .overlay .button-row{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:center;}
+  .end-stats{font-size:.95rem;color:var(--ink-dim);margin-bottom:1.5rem;}
+  .end-stats b{color:var(--juice-banana);font-weight:800;}
+  .badge{display:inline-block;padding:.3rem .85rem;border:1px solid rgba(255,255,255,.18);border-radius:999px;color:var(--ink-dim);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:1.25rem;}
+  .back-link{position:fixed;top:.75rem;right:.75rem;z-index:12;color:var(--ink-dim);text-decoration:none;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;padding:.4rem .7rem;background:rgba(0,0,0,.5);border-radius:8px;border:1px solid rgba(255,255,255,.12);}
+  .back-link:hover{color:#fff;}
+  /* Loading splash inside the canvas area */
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;z-index:31;background:rgba(7,7,12,.95);color:var(--ink);}
+  #loading .spinner{width:48px;height:48px;border-radius:50%;border:4px solid rgba(255,255,255,.1);border-top-color:var(--juice-melon);animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #loading.hidden{display:none;}
+  @supports(padding:max(0px)){
+    .touch-controls{padding-bottom:max(1rem,env(safe-area-inset-bottom));}
+    .hud.top{padding-top:max(.8rem,env(safe-area-inset-top));}
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<a href="/" class="back-link">← back</a>
+<canvas id="three"></canvas>
+
+<div class="hud top">
+  <div class="hp-block">
+    <div class="hp-label">🍉 Wrecking Melon</div>
+    <div class="hp-bar"><div id="player-hp" class="hp-fill" style="background:#e13c5a;color:#e13c5a;"></div></div>
+  </div>
+  <div class="combo-center">
+    <div id="combo-rank" class="combo-rank">—</div>
+    <div class="combo-points"><span id="combo-points">0</span> pts</div>
+  </div>
+  <div class="hp-block" style="text-align:right;">
+    <div class="hp-label">Wave <span id="wave-num">1</span> · <span id="enemy-count">0</span> left</div>
+    <div class="hp-bar"><div id="enemy-hp" class="hp-fill" style="background:#f9d43a;color:#f9d43a;width:0%"></div></div>
+  </div>
+</div>
+
+<div id="banner" class="banner" aria-live="polite"></div>
+
+<div class="touch-controls" aria-hidden="true">
+  <div id="joystick" class="joystick"><div id="joystick-nub" class="joystick__nub"></div></div>
+  <button id="btn-attack" class="btn-attack" aria-label="attack">⚔</button>
+  <button id="btn-fruitality" class="btn-fruitality" aria-label="fruitality">FRUI</button>
+</div>
+
+<div id="start-overlay" class="overlay">
+  <span class="badge">3D Prototype · Three.js</span>
+  <h1>FRUITALITY 3D</h1>
+  <p>Real 3D arena. Real shadows. Real cinematic camera. Stylized AAA browser prototype to feel the combat before the Unity build.</p>
+  <div class="controls">
+    <kbd>WASD / arrows</kbd><span>Move</span>
+    <kbd>Space / Click</kbd><span>Vine-whip attack</span>
+    <kbd>F</kbd><span>Fruitality finisher (when ready)</span>
+    <kbd>Shift</kbd><span>Dodge roll</span>
+    <kbd>R</kbd><span>Restart</span>
+  </div>
+  <button id="start-btn">▶ Enter the orchard</button>
+</div>
+
+<div id="end-overlay" class="overlay hidden">
+  <span class="badge">Run complete</span>
+  <h1 id="end-title">JUICED.</h1>
+  <p id="end-message" class="end-stats">You survived the orchard.</p>
+  <p class="end-stats">Final rank: <b id="end-rank">D</b> · Score: <b id="end-score">0</b> · Fruitalities: <b id="end-finishers">0</b></p>
+  <div class="button-row">
+    <button id="end-restart">▶ Run it back</button>
+    <button onclick="location.href='play.html'" class="secondary">2D version</button>
+    <button onclick="location.href='/'" class="secondary">Back to site</button>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p style="color:var(--ink-dim);font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;margin:0;">Loading 3D arena…</p>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+
+// ========== CONFIG ==========
+const CFG = {
+  arena: { radius: 30, wallHeight: 4 },
+  player: {
+    speed: 7.5, attackCd: 0.32, attackReach: 4.0,
+    attackDamage: 16, hp: 120, iframes: 0.55, dodgeSpeed: 22,
+    dodgeDur: 0.35, dodgeCd: 0.9
+  },
+  enemy: {
+    speed: 4.2, attackCd: 1.0, attackReach: 1.7, attackDamage: 9,
+    hp: 50, knockback: 4, finisherThreshold: 0.16, spawnDelay: 0.2
+  },
+  waves: [
+    { count: 3 },
+    { count: 5 },
+    { count: 7 },
+    { count: 9 }
+  ],
+  combo: {
+    decayPerSecond: 10, gracePeriod: 1.1,
+    pointsHit: 6, pointsFinisher: 70,
+    thresholds: [
+      ['D', 1], ['C', 28], ['B', 60], ['A', 110],
+      ['S', 180], ['SS', 260], ['JUICEMASTER', 360]
+    ]
+  },
+  hitPause: { normal: 0.06, finisher: 0.5 },
+  cameraShake: { mag: 0.12, dur: 0.22 },
+  juice: { melon: 0xe13c5a, banana: 0xf9d43a }
+};
+
+// ========== DOM ==========
+const $ = id => document.getElementById(id);
+const canvas = $('three');
+
+// ========== RENDERER + SCENE ==========
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b070d);
+scene.fog = new THREE.FogExp2(0x180814, 0.018);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 12, 18);
+camera.lookAt(0, 0, 0);
+
+// ========== LIGHTING ==========
+const ambient = new THREE.HemisphereLight(0xff97b3, 0x1a0612, 0.55);
+scene.add(ambient);
+
+const key = new THREE.DirectionalLight(0xff8866, 1.6);
+key.position.set(18, 24, 12);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 1;
+key.shadow.camera.far = 80;
+key.shadow.camera.left = -30;
+key.shadow.camera.right = 30;
+key.shadow.camera.top = 30;
+key.shadow.camera.bottom = -30;
+key.shadow.bias = -0.0005;
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0x4eb3d4, 0.55);
+fill.position.set(-14, 12, -8);
+scene.add(fill);
+
+const rim = new THREE.SpotLight(0xff5277, 8, 60, Math.PI / 4, 0.6, 1);
+rim.position.set(0, 22, -18);
+rim.target.position.set(0, 0, 0);
+scene.add(rim, rim.target);
+
+// ========== ARENA ==========
+// Floor
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x2a0f1e, roughness: 0.85, metalness: 0.0,
+  emissive: 0x100407, emissiveIntensity: 0.4
+});
+// procedural dirt-noise normal map via canvas
+const noiseCanvas = document.createElement('canvas');
+noiseCanvas.width = noiseCanvas.height = 256;
+const nctx = noiseCanvas.getContext('2d');
+const img = nctx.createImageData(256, 256);
+for (let i = 0; i < img.data.length; i += 4) {
+  const v = 110 + Math.random() * 80;
+  img.data[i] = v; img.data[i+1] = v; img.data[i+2] = 255; img.data[i+3] = 255;
+}
+nctx.putImageData(img, 0, 0);
+const normalTex = new THREE.CanvasTexture(noiseCanvas);
+normalTex.wrapS = normalTex.wrapT = THREE.RepeatWrapping;
+normalTex.repeat.set(8, 8);
+floorMat.normalMap = normalTex;
+floorMat.normalScale.set(0.3, 0.3);
+
+const floorGeo = new THREE.CircleGeometry(CFG.arena.radius, 64);
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Glowing ring at arena edge
+const ringGeo = new THREE.RingGeometry(CFG.arena.radius - 0.4, CFG.arena.radius, 64);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0xe13c5a, side: THREE.DoubleSide });
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.rotation.x = -Math.PI / 2;
+ring.position.y = 0.02;
+scene.add(ring);
+
+// Floor grid faint emissive lines
+const gridGeo = new THREE.BufferGeometry();
+const gridLines = [];
+for (let i = -CFG.arena.radius; i <= CFG.arena.radius; i += 4) {
+  gridLines.push(-CFG.arena.radius, 0.01, i,  CFG.arena.radius, 0.01, i);
+  gridLines.push(i, 0.01, -CFG.arena.radius,  i, 0.01, CFG.arena.radius);
+}
+gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(gridLines, 3));
+const gridMat = new THREE.LineBasicMaterial({ color: 0xe13c5a, transparent: true, opacity: 0.08 });
+scene.add(new THREE.LineSegments(gridGeo, gridMat));
+
+// Wall pillars (decorative)
+const pillarMat = new THREE.MeshStandardMaterial({ color: 0x180714, roughness: 0.9, emissive: 0x300611, emissiveIntensity: 0.5 });
+for (let i = 0; i < 12; i++) {
+  const a = (i / 12) * Math.PI * 2;
+  const r = CFG.arena.radius + 1.5;
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 6, 8), pillarMat);
+  p.position.set(Math.cos(a) * r, 3, Math.sin(a) * r);
+  p.castShadow = true;
+  scene.add(p);
+  // pillar emissive top
+  const cap = new THREE.Mesh(
+    new THREE.SphereGeometry(0.5, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xff5e7a })
+  );
+  cap.position.set(Math.cos(a) * r, 6.4, Math.sin(a) * r);
+  scene.add(cap);
+}
+
+// ========== POSTPROCESSING ==========
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.05, 0.7, 0.18);
+composer.addPass(bloom);
+
+// Custom vignette + chromatic kiss pass
+const vignetteShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    intensity: { value: 1.0 },
+    flash: { value: 0.0 }
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float intensity;
+    uniform float flash;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec2 q = vUv - 0.5;
+      float v = 1.0 - dot(q,q) * (1.6 * intensity);
+      c.rgb *= clamp(v, 0.35, 1.0);
+      // warm shadows + saturated highlights
+      c.rgb = mix(c.rgb, vec3(c.r * 1.05, c.g * 0.96, c.b * 1.10), 0.25);
+      c.rgb += flash * vec3(1.0, 0.4, 0.6);
+      gl_FragColor = c;
+    }
+  `
+};
+const vignettePass = new ShaderPass(vignetteShader);
+composer.addPass(vignettePass);
+
+const fxaa = new ShaderPass(FXAAShader);
+fxaa.material.uniforms['resolution'].value.set(1 / (window.innerWidth * Math.min(devicePixelRatio,2)), 1 / (window.innerHeight * Math.min(devicePixelRatio,2)));
+composer.addPass(fxaa);
+composer.addPass(new OutputPass());
+
+// ========== CHARACTERS ==========
+function makeWatermelon() {
+  const group = new THREE.Group();
+  // Body: green flat-shaded sphere
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a8e3f, roughness: 0.4, metalness: 0.05, flatShading: false, emissive: 0x0a3018, emissiveIntensity: 0.3 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.95, 32, 24), bodyMat);
+  body.position.y = 1;
+  body.castShadow = true; body.receiveShadow = true;
+  group.add(body);
+
+  // Dark green stripes via additional thin meshes
+  for (let i = 0; i < 8; i++) {
+    const t = (i / 8) * Math.PI * 2;
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0x0c4f1c, roughness: 0.5 });
+    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.06, 8, 32, Math.PI), stripeMat);
+    stripe.rotation.y = t;
+    stripe.rotation.x = Math.PI / 2;
+    stripe.position.y = 1;
+    group.add(stripe);
+  }
+
+  // Eyes
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111 });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.10, 12, 12), eyeMat);
+  eyeL.position.set(-0.28, 1.18, 0.85);
+  const eyeR = eyeL.clone();
+  eyeR.position.x = 0.28;
+  group.add(eyeL, eyeR);
+
+  // Mouth scowl
+  const mouthMat = new THREE.MeshBasicMaterial({ color: 0x1a0408 });
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 16, Math.PI), mouthMat);
+  mouth.position.set(0, 0.82, 0.88);
+  mouth.rotation.z = Math.PI;
+  group.add(mouth);
+
+  // Vine whips (arms)
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x1a4d23, roughness: 0.6, emissive: 0x0a3015, emissiveIntensity: 0.4 });
+  const armGeo = new THREE.CapsuleGeometry(0.10, 0.6, 4, 8);
+  const armL = new THREE.Mesh(armGeo, armMat); armL.position.set(-0.95, 0.95, 0); armL.rotation.z = -0.6; armL.castShadow = true;
+  const armR = armL.clone(); armR.position.x = 0.95; armR.rotation.z = 0.6;
+  group.add(armL, armR);
+
+  // Whip tip emissive
+  const whipMat = new THREE.MeshBasicMaterial({ color: 0xff7799 });
+  const whipL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), whipMat);
+  whipL.position.set(-1.35, 0.55, 0);
+  const whipR = whipL.clone(); whipR.position.x = 1.35;
+  group.add(whipL, whipR);
+
+  group.userData.partRefs = { body, eyeL, eyeR, armL, armR, whipL, whipR };
+  return group;
+}
+
+function makeBanana() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xefd031, roughness: 0.45, emissive: 0x3a2e08, emissiveIntensity: 0.3 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.0, 8, 16), mat);
+  body.rotation.z = 0.45;
+  body.position.y = 0.9;
+  body.castShadow = true;
+  group.add(body);
+
+  // Brown spots
+  for (let i = 0; i < 6; i++) {
+    const spot = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x3a2208 }));
+    const a = Math.random() * Math.PI * 2;
+    spot.position.set(0.35 * Math.cos(a), 0.5 + Math.random() * 0.7, 0.35 * Math.sin(a));
+    body.add(spot);
+  }
+
+  // Eyes
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111 });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), eyeMat);
+  eyeL.position.set(-0.15, 1.4, 0.35);
+  const eyeR = eyeL.clone();
+  eyeR.position.x = 0.15;
+  group.add(eyeL, eyeR);
+
+  group.userData.body = body;
+  return group;
+}
+
+// ========== STATE ==========
+const state = {
+  running: false, finished: false, time: 0,
+  hitPauseRemaining: 0,
+  shake: { mag: 0, t: 0 },
+  slowMo: { remaining: 0, scale: 1 },
+  flashImpact: 0,
+  wave: 0,
+  enemies: [],
+  particles: [],
+  floaters: [],
+  finisherCount: 0,
+  score: 0,
+  keys: new Set(),
+  joystickVec: { x: 0, y: 0 },
+  bannerTimer: 0
+};
+const player = {
+  mesh: null,
+  pos: new THREE.Vector3(0, 0, 0),
+  vel: new THREE.Vector3(),
+  facing: new THREE.Vector3(0, 0, 1),
+  hp: CFG.player.hp,
+  attackCdRemaining: 0,
+  attackVisualRemaining: 0,
+  iframesRemaining: 0,
+  dodgeRemaining: 0, dodgeCdRemaining: 0,
+  attackDir: new THREE.Vector3(0, 0, 1)
+};
+const combo = { points: 0, rank: 'None', lastHitTime: -10 };
+const camRig = {
+  target: new THREE.Vector3(0, 1.5, 0),
+  desiredPos: new THREE.Vector3(0, 12, 16),
+  smooth: 5,
+  finisherCamActive: false, finisherCamTimer: 0, finisherFocus: null
+};
+
+// ========== PARTICLES (instanced points) ==========
+const MAX_PARTICLES = 4000;
+const partGeo = new THREE.BufferGeometry();
+const partPositions = new Float32Array(MAX_PARTICLES * 3);
+const partColors = new Float32Array(MAX_PARTICLES * 3);
+const partSizes = new Float32Array(MAX_PARTICLES);
+partGeo.setAttribute('position', new THREE.BufferAttribute(partPositions, 3));
+partGeo.setAttribute('color', new THREE.BufferAttribute(partColors, 3));
+partGeo.setAttribute('size', new THREE.BufferAttribute(partSizes, 1));
+const partMat = new THREE.ShaderMaterial({
+  uniforms: { pointTex: { value: makeRoundTexture() } },
+  vertexShader: `
+    attribute float size;
+    varying vec3 vColor;
+    void main() {
+      vColor = color;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = size * (300.0 / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D pointTex;
+    varying vec3 vColor;
+    void main() {
+      vec4 t = texture2D(pointTex, gl_PointCoord);
+      if (t.a < 0.04) discard;
+      gl_FragColor = vec4(vColor, t.a);
+    }
+  `,
+  vertexColors: true,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
+const points = new THREE.Points(partGeo, partMat);
+scene.add(points);
+let particleCursor = 0;
+
+function makeRoundTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const grad = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = grad; x.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+
+function spawnJuice(origin, hexColor, count = 14, speed = 8, life = 0.9) {
+  const col = new THREE.Color(hexColor);
+  for (let i = 0; i < count; i++) {
+    const phi = Math.random() * Math.PI * 2;
+    const theta = Math.random() * Math.PI;
+    const v = new THREE.Vector3(
+      Math.sin(theta) * Math.cos(phi),
+      Math.cos(theta) * 0.5 + 0.5,
+      Math.sin(theta) * Math.sin(phi)
+    ).multiplyScalar(speed * (0.5 + Math.random()));
+    state.particles.push({
+      pos: origin.clone(), vel: v,
+      gravity: 12, life: life * (0.6 + Math.random()*0.6), maxLife: 0,
+      color: col, size: 0.6 + Math.random() * 0.5
+    });
+    state.particles[state.particles.length-1].maxLife = state.particles[state.particles.length-1].life;
+  }
+}
+
+function updateParticleBuffer() {
+  partGeo.setDrawRange(0, state.particles.length);
+  for (let i = 0; i < state.particles.length; i++) {
+    const p = state.particles[i];
+    partPositions[i*3+0] = p.pos.x;
+    partPositions[i*3+1] = p.pos.y;
+    partPositions[i*3+2] = p.pos.z;
+    const a = Math.max(0, p.life / p.maxLife);
+    partColors[i*3+0] = p.color.r * a;
+    partColors[i*3+1] = p.color.g * a;
+    partColors[i*3+2] = p.color.b * a;
+    partSizes[i] = p.size * a;
+  }
+  partGeo.attributes.position.needsUpdate = true;
+  partGeo.attributes.color.needsUpdate = true;
+  partGeo.attributes.size.needsUpdate = true;
+}
+
+// ========== AUDIO ==========
+const Audio = {
+  ctx: null, enabled: false,
+  init() { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); this.enabled = true; } catch (e) {} },
+  blip({ freq=440, dur=0.08, type='square', gain=0.18, sweep=0 }) {
+    if (!this.enabled) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (sweep) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + sweep), t + dur);
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(this.ctx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  hit() { this.blip({ freq: 220, dur: 0.06, type: 'square', gain: 0.18, sweep: -180 }); },
+  heavy() { this.blip({ freq: 140, dur: 0.12, type: 'sawtooth', gain: 0.22, sweep: -90 }); },
+  finisher() {
+    this.blip({ freq: 80, dur: 0.5, type: 'sawtooth', gain: 0.30, sweep: -60 });
+    setTimeout(() => this.blip({ freq: 60, dur: 0.7, type: 'sine', gain: 0.22, sweep: 200 }), 100);
+  },
+  splat() { this.blip({ freq: 1200, dur: 0.04, type: 'triangle', gain: 0.12, sweep: -1000 }); },
+  swing() { this.blip({ freq: 600, dur: 0.05, type: 'sawtooth', gain: 0.08, sweep: -400 }); },
+  enemyHurt() { this.blip({ freq: 320, dur: 0.10, type: 'sine', gain: 0.10, sweep: -120 }); },
+  playerHurt() { this.blip({ freq: 110, dur: 0.18, type: 'triangle', gain: 0.20, sweep: -40 }); },
+  waveStart() { this.blip({ freq: 660, dur: 0.20, type: 'sine', gain: 0.18, sweep: 200 }); }
+};
+function buzz(ms){ if('vibrate' in navigator){ try{ navigator.vibrate(ms); }catch(e){} } }
+
+// ========== INPUT ==========
+function bindKeyboard() {
+  const k = state.keys;
+  window.addEventListener('keydown', e => {
+    const key = e.key.toLowerCase();
+    if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','f','r','shift'].includes(key)) e.preventDefault();
+    k.add(key);
+    if (key === 'r') restart();
+    if (!state.running) return;
+    if (key === ' ') tryAttack();
+    if (key === 'f') tryFinisher();
+    if (key === 'shift') tryDodge();
+  });
+  window.addEventListener('keyup', e => { k.delete(e.key.toLowerCase()); });
+  window.addEventListener('blur', () => k.clear());
+  window.addEventListener('mousedown', e => { if (state.running) tryAttack(); });
+}
+function readKeyboardVec() {
+  let dx=0, dy=0;
+  const k = state.keys;
+  if (k.has('w') || k.has('arrowup'))    dy -= 1;
+  if (k.has('s') || k.has('arrowdown'))  dy += 1;
+  if (k.has('a') || k.has('arrowleft'))  dx -= 1;
+  if (k.has('d') || k.has('arrowright')) dx += 1;
+  const m = Math.hypot(dx,dy);
+  if (m > 0) { dx /= m; dy /= m; }
+  return { x: dx, y: dy };
+}
+function bindTouch() {
+  const joy = $('joystick'), nub = $('joystick-nub'), btnAtt = $('btn-attack'), btnFin = $('btn-fruitality');
+  let activeId = null; const radius = 70;
+  function setNub(dx, dy) {
+    nub.style.transform = `translate(${dx}px, ${dy}px)`;
+    const m = Math.hypot(dx, dy);
+    const n = m === 0 ? { x: 0, y: 0 } : { x: dx / m, y: dy / m };
+    const strength = Math.min(1, m / radius);
+    state.joystickVec = { x: n.x * strength, y: n.y * strength };
+  }
+  joy.addEventListener('touchstart', e => {
+    if (activeId !== null) return;
+    const t = e.changedTouches[0]; activeId = t.identifier;
+    const r = joy.getBoundingClientRect();
+    let dx = t.clientX - (r.left + r.width/2), dy = t.clientY - (r.top + r.height/2);
+    const m = Math.hypot(dx,dy);
+    if (m > radius) { dx = dx/m*radius; dy = dy/m*radius; }
+    setNub(dx, dy); e.preventDefault();
+  }, { passive: false });
+  joy.addEventListener('touchmove', e => {
+    if (activeId === null) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier !== activeId) continue;
+      const r = joy.getBoundingClientRect();
+      let dx = t.clientX - (r.left + r.width/2), dy = t.clientY - (r.top + r.height/2);
+      const m = Math.hypot(dx,dy);
+      if (m > radius) { dx = dx/m*radius; dy = dy/m*radius; }
+      setNub(dx, dy);
+    }
+    e.preventDefault();
+  }, { passive: false });
+  function endT(e) { for (const t of e.changedTouches) if (t.identifier === activeId) { activeId = null; setNub(0,0); } }
+  joy.addEventListener('touchend', endT); joy.addEventListener('touchcancel', endT);
+  btnAtt.addEventListener('touchstart', e => { e.preventDefault(); tryAttack(); }, { passive: false });
+  btnAtt.addEventListener('click', e => { e.preventDefault(); tryAttack(); });
+  btnFin.addEventListener('touchstart', e => { e.preventDefault(); tryFinisher(); }, { passive: false });
+  btnFin.addEventListener('click', e => { e.preventDefault(); tryFinisher(); });
+}
+
+// ========== COMBAT ==========
+function tryAttack() {
+  if (!state.running) return;
+  if (player.attackCdRemaining > 0) return;
+  player.attackCdRemaining = CFG.player.attackCd;
+  player.attackVisualRemaining = 0.18;
+  // attack direction: facing
+  player.attackDir.copy(player.facing);
+  Audio.swing();
+
+  // hit detection (sphere overlap + arc check)
+  for (const e of state.enemies) {
+    if (e.hp <= 0) continue;
+    const dir = e.mesh.position.clone().sub(player.mesh.position);
+    const dist = dir.length();
+    if (dist > CFG.player.attackReach) continue;
+    dir.normalize();
+    const dot = dir.dot(player.facing);
+    if (dot < 0.25) continue; // ~150° arc
+
+    e.hp -= CFG.player.attackDamage;
+    e.damageFlash = 0.18;
+    // knockback
+    e.vel.add(dir.clone().multiplyScalar(CFG.enemy.knockback));
+    spawnJuice(e.mesh.position.clone().setY(e.mesh.position.y + 0.6), CFG.juice.banana, 14, 7);
+    spawnFloater(`+${CFG.player.attackDamage}`, e.mesh.position.clone().setY(1.8));
+    Audio.hit(); Audio.enemyHurt(); Audio.splat();
+    buzz(15);
+    addComboPoints(CFG.combo.pointsHit);
+    state.hitPauseRemaining = CFG.hitPause.normal;
+    shake(CFG.cameraShake.mag, CFG.cameraShake.dur);
+
+    if (e.hp <= 0) {
+      spawnJuice(e.mesh.position.clone().setY(e.mesh.position.y + 0.5), CFG.juice.banana, 40, 14, 1.4);
+      Audio.heavy();
+      buzz([30,20,40]);
+    }
+  }
+  state.enemies = state.enemies.filter(e => e.hp > 0 || e.deathTimer > 0 || keepCorpse(e));
+  // Remove dead ones from scene cleanly
+  state.enemies = state.enemies.filter(e => {
+    if (e.hp <= 0) { scene.remove(e.mesh); return false; }
+    return true;
+  });
+}
+
+function keepCorpse() { return false; }
+
+function tryFinisher() {
+  if (!state.running) return;
+  const r = CFG.player.attackReach * 1.6;
+  let target = null; let best = Infinity;
+  for (const e of state.enemies) {
+    const d = e.mesh.position.distanceTo(player.mesh.position);
+    if (d > r) continue;
+    if (e.hp / CFG.enemy.hp > CFG.enemy.finisherThreshold) continue;
+    if (d < best) { best = d; target = e; }
+  }
+  if (!target) return;
+
+  state.finisherCount++;
+  addComboPoints(CFG.combo.pointsFinisher);
+  state.hitPauseRemaining = CFG.hitPause.finisher;
+  state.slowMo = { remaining: 0.9, scale: 0.30 };
+  state.flashImpact = 0.6;
+  shake(0.25, 0.5);
+  Audio.finisher();
+  buzz([50,30,80,30,100]);
+  // BIG juice geyser
+  const origin = target.mesh.position.clone().setY(target.mesh.position.y + 0.3);
+  spawnJuice(origin, CFG.juice.banana, 140, 18, 1.6);
+  spawnFloater('FRUITALITY!', origin.clone().setY(3), 0xe13c5a);
+
+  // finisher camera takeover
+  camRig.finisherCamActive = true;
+  camRig.finisherCamTimer = 1.8;
+  camRig.finisherFocus = target.mesh.position.clone();
+
+  target.hp = -1;
+  scene.remove(target.mesh);
+  state.enemies = state.enemies.filter(e => e !== target);
+
+  showBanner('FRUITALITY', '+70 STYLE · CLIP SAVED');
+}
+
+function tryDodge() {
+  if (player.dodgeCdRemaining > 0 || player.dodgeRemaining > 0) return;
+  const move = state.joystickVec.x || state.joystickVec.y ? state.joystickVec : readKeyboardVec();
+  if (!move.x && !move.y) return;
+  player.dodgeRemaining = CFG.player.dodgeDur;
+  player.dodgeCdRemaining = CFG.player.dodgeCd;
+  player.iframesRemaining = CFG.player.dodgeDur * 0.9;
+}
+
+function addComboPoints(p) { combo.points += p; combo.lastHitTime = state.time; refreshRank(); }
+function refreshRank() {
+  const prev = combo.rank;
+  let next = 'None';
+  for (let i = CFG.combo.thresholds.length - 1; i >= 0; i--) {
+    if (combo.points >= CFG.combo.thresholds[i][1]) { next = CFG.combo.thresholds[i][0]; break; }
+  }
+  combo.rank = next;
+  const el = $('combo-rank');
+  if (next !== prev) {
+    el.textContent = next === 'None' ? '—' : next;
+    el.classList.add('beat');
+    setTimeout(() => el.classList.remove('beat'), 200);
+    const gold = ['S','SS','JUICEMASTER'];
+    el.style.color = next === 'JUICEMASTER' ? '#e13c5a' : (gold.includes(next) ? '#ffce4d' : '#f9d43a');
+  }
+  $('combo-points').textContent = Math.round(combo.points);
+}
+function shake(mag, dur) { state.shake.mag = Math.max(state.shake.mag, mag); state.shake.t = Math.max(state.shake.t, dur); }
+function showBanner(text, sub='') {
+  const b = $('banner');
+  b.innerHTML = text + (sub ? `<small>${sub}</small>` : '');
+  b.classList.add('show'); state.bannerTimer = 1.6;
+}
+
+// Floating text in 3D world (rendered as DOM overlay via projection — kept simple)
+function spawnFloater(text, worldPos, color = 0xffffff) {
+  state.floaters.push({ text, pos: worldPos.clone(), color, life: 1.0 });
+}
+
+// ========== ENEMIES ==========
+function spawnEnemy() {
+  const angle = Math.random() * Math.PI * 2;
+  const r = CFG.arena.radius - 4;
+  const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+  const mesh = makeBanana();
+  mesh.position.copy(pos);
+  scene.add(mesh);
+  state.enemies.push({
+    mesh, vel: new THREE.Vector3(),
+    hp: CFG.enemy.hp,
+    attackCdRemaining: 0.5 + Math.random() * 1.2,
+    damageFlash: 0
+  });
+}
+
+function damagePlayer(amount) {
+  if (player.iframesRemaining > 0 || state.finished) return;
+  player.hp -= amount;
+  player.iframesRemaining = CFG.player.iframes;
+  spawnJuice(player.mesh.position.clone().setY(player.mesh.position.y + 0.5), CFG.juice.melon, 12, 6);
+  spawnFloater(`-${amount}`, player.mesh.position.clone().setY(2.1), CFG.juice.melon);
+  Audio.playerHurt(); buzz(40); shake(0.2, 0.25);
+  if (player.hp <= 0) endRun(false);
+}
+
+// ========== UPDATE ==========
+const tmpVec = new THREE.Vector3();
+const fwdRef = new THREE.Vector3(0, 0, 1);
+const rightRef = new THREE.Vector3(1, 0, 0);
+
+function update(dt) {
+  state.time += dt;
+  if (state.bannerTimer > 0) {
+    state.bannerTimer -= dt;
+    if (state.bannerTimer <= 0) $('banner').classList.remove('show');
+  }
+
+  // input — convert screen-space joystick to world-space (relative to camera)
+  let move = state.joystickVec.x || state.joystickVec.y ? state.joystickVec : readKeyboardVec();
+  const camFwd = new THREE.Vector3(); camera.getWorldDirection(camFwd); camFwd.y = 0; camFwd.normalize();
+  const camRight = new THREE.Vector3().crossVectors(camFwd, new THREE.Vector3(0,1,0)).normalize();
+  const worldMove = new THREE.Vector3()
+    .addScaledVector(camRight, move.x)
+    .addScaledVector(camFwd, -move.y);
+  if (worldMove.lengthSq() > 0.0001) {
+    worldMove.normalize();
+    player.facing.lerp(worldMove, 0.18);
+    player.facing.normalize();
+  }
+
+  let speed = CFG.player.speed;
+  if (player.dodgeRemaining > 0) { speed = CFG.player.dodgeSpeed; player.dodgeRemaining -= dt; }
+  if (player.dodgeCdRemaining > 0) player.dodgeCdRemaining -= dt;
+
+  player.vel.copy(worldMove).multiplyScalar(speed);
+  player.mesh.position.x += player.vel.x * dt;
+  player.mesh.position.z += player.vel.z * dt;
+
+  // keep in arena
+  const flat = player.mesh.position.clone(); flat.y = 0;
+  const distFromCenter = flat.length();
+  if (distFromCenter > CFG.arena.radius - 1.2) {
+    flat.setLength(CFG.arena.radius - 1.2);
+    player.mesh.position.x = flat.x; player.mesh.position.z = flat.z;
+  }
+
+  // face the player toward facing direction
+  const lookAt = player.mesh.position.clone().add(player.facing);
+  player.mesh.lookAt(lookAt);
+
+  // bob animation
+  player.mesh.position.y = Math.sin(state.time * 7) * 0.08 + (worldMove.lengthSq() > 0.01 ? 0.05 : 0);
+
+  // attack visual: swing whip
+  if (player.attackCdRemaining > 0) player.attackCdRemaining -= dt;
+  if (player.attackVisualRemaining > 0) {
+    player.attackVisualRemaining -= dt;
+    // make the whips longer briefly
+    const arms = player.mesh.userData.partRefs;
+    const t = 1 - (player.attackVisualRemaining / 0.18);
+    arms.whipL.position.set(-1.35 - t*1.0, 0.55, t*0.6);
+    arms.whipR.position.set(1.35 + t*1.0, 0.55, t*0.6);
+    arms.armL.scale.set(1, 1 + t*0.6, 1);
+    arms.armR.scale.set(1, 1 + t*0.6, 1);
+  } else {
+    const arms = player.mesh.userData.partRefs;
+    arms.whipL.position.set(-1.35, 0.55, 0);
+    arms.whipR.position.set(1.35, 0.55, 0);
+    arms.armL.scale.set(1, 1, 1); arms.armR.scale.set(1, 1, 1);
+  }
+  if (player.iframesRemaining > 0) {
+    player.iframesRemaining -= dt;
+    player.mesh.userData.partRefs.body.material.opacity = (Math.floor(state.time * 18) % 2 === 0) ? 0.4 : 1.0;
+    player.mesh.userData.partRefs.body.material.transparent = true;
+  } else {
+    player.mesh.userData.partRefs.body.material.opacity = 1.0;
+  }
+
+  // enemies AI
+  for (const e of state.enemies) {
+    e.damageFlash = Math.max(0, e.damageFlash - dt);
+    e.vel.multiplyScalar(Math.pow(0.001, dt));
+    const dx = player.mesh.position.x - e.mesh.position.x;
+    const dz = player.mesh.position.z - e.mesh.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > CFG.enemy.attackReach) {
+      e.vel.x += (dx / dist) * CFG.enemy.speed * dt * 6;
+      e.vel.z += (dz / dist) * CFG.enemy.speed * dt * 6;
+    }
+    const v = Math.hypot(e.vel.x, e.vel.z);
+    if (v > CFG.enemy.speed) { e.vel.x = e.vel.x / v * CFG.enemy.speed; e.vel.z = e.vel.z / v * CFG.enemy.speed; }
+    e.mesh.position.x += e.vel.x * dt;
+    e.mesh.position.z += e.vel.z * dt;
+    // bob
+    e.mesh.position.y = 0 + Math.sin(state.time * 5 + e.mesh.id) * 0.05;
+    // face player
+    e.mesh.lookAt(player.mesh.position.x, e.mesh.position.y + 0.5, player.mesh.position.z);
+    // damage flash via emissive boost
+    if (e.mesh.userData.body) {
+      e.mesh.userData.body.material.emissiveIntensity = 0.3 + e.damageFlash * 2;
+    }
+
+    e.attackCdRemaining -= dt;
+    if (dist <= CFG.enemy.attackReach && e.attackCdRemaining <= 0) {
+      e.attackCdRemaining = CFG.enemy.attackCd;
+      damagePlayer(CFG.enemy.attackDamage);
+    }
+  }
+
+  // wave management
+  if (state.enemies.length === 0 && !state.finished) {
+    state.wave++;
+    if (state.wave > CFG.waves.length) {
+      endRun(true);
+    } else {
+      const w = CFG.waves[state.wave - 1];
+      for (let i = 0; i < w.count; i++) setTimeout(spawnEnemy, i * 120);
+      Audio.waveStart();
+      $('wave-num').textContent = state.wave;
+      showBanner(`WAVE ${state.wave}`, `${w.count} BANANAS INCOMING`);
+    }
+  }
+  $('enemy-count').textContent = state.enemies.length;
+
+  // combo decay
+  if (combo.points > 0 && state.time - combo.lastHitTime > CFG.combo.gracePeriod) {
+    combo.points = Math.max(0, combo.points - CFG.combo.decayPerSecond * dt);
+    refreshRank();
+  }
+
+  // particles
+  for (const p of state.particles) {
+    p.pos.x += p.vel.x * dt;
+    p.pos.y += p.vel.y * dt;
+    p.pos.z += p.vel.z * dt;
+    p.vel.y -= p.gravity * dt;
+    p.vel.multiplyScalar(Math.pow(0.4, dt));
+    p.life -= dt;
+  }
+  state.particles = state.particles.filter(p => p.life > 0);
+  while (state.particles.length > MAX_PARTICLES) state.particles.shift();
+  updateParticleBuffer();
+
+  // floaters: spawn DOM if not present
+  for (const f of state.floaters) { f.pos.y += dt * 1.2; f.life -= dt; }
+  state.floaters = state.floaters.filter(f => f.life > 0);
+
+  // camera
+  updateCamera(dt);
+
+  if (state.shake.t > 0) state.shake.t -= dt; else state.shake.mag = 0;
+  if (state.slowMo.remaining > 0) state.slowMo.remaining -= dt;
+  if (state.flashImpact > 0) state.flashImpact = Math.max(0, state.flashImpact - dt * 1.5);
+
+  // HUD
+  $('player-hp').style.width = Math.max(0, player.hp / CFG.player.hp * 100) + '%';
+  let strongest = null;
+  for (const e of state.enemies) if (!strongest || e.hp > strongest.hp) strongest = e;
+  $('enemy-hp').style.width = strongest ? (strongest.hp / CFG.enemy.hp * 100) + '%' : '0%';
+  const finBtn = $('btn-fruitality');
+  const anyFin = state.enemies.some(e => e.hp / CFG.enemy.hp <= CFG.enemy.finisherThreshold);
+  if (anyFin) finBtn.classList.add('ready'); else finBtn.classList.remove('ready');
+}
+
+function updateCamera(dt) {
+  if (camRig.finisherCamActive) {
+    camRig.finisherCamTimer -= dt;
+    const focus = camRig.finisherFocus;
+    // orbit around focus point dramatically
+    const t = 1 - camRig.finisherCamTimer / 1.8;
+    const a = t * Math.PI * 0.7;
+    const r = 6 + Math.cos(t * Math.PI) * 2;
+    camera.position.set(
+      focus.x + Math.cos(a) * r,
+      4 + Math.sin(t * Math.PI) * 4,
+      focus.z + Math.sin(a) * r
+    );
+    camera.lookAt(focus.x, focus.y + 0.6, focus.z);
+    if (camRig.finisherCamTimer <= 0) {
+      camRig.finisherCamActive = false;
+    }
+  } else {
+    const desired = new THREE.Vector3(
+      player.mesh.position.x - player.facing.x * 8,
+      player.mesh.position.y + 10,
+      player.mesh.position.z - player.facing.z * 8 + 4
+    );
+    camera.position.lerp(desired, 1 - Math.pow(0.0005, dt));
+    const lookTarget = new THREE.Vector3(player.mesh.position.x, player.mesh.position.y + 1.2, player.mesh.position.z);
+    const look = new THREE.Vector3();
+    look.copy(lookTarget);
+    if (state.shake.t > 0) {
+      const intensity = state.shake.t / 0.5;
+      look.x += (Math.random() - 0.5) * state.shake.mag * intensity * 4;
+      look.y += (Math.random() - 0.5) * state.shake.mag * intensity * 2;
+      look.z += (Math.random() - 0.5) * state.shake.mag * intensity * 4;
+    }
+    camera.lookAt(look);
+  }
+  vignettePass.uniforms.flash.value = state.flashImpact;
+  bloom.strength = 0.9 + (combo.rank === 'JUICEMASTER' ? 0.5 : 0) + state.flashImpact * 1.4;
+}
+
+// ========== RENDER LOOP ==========
+let lastTs = performance.now();
+function loop(ts) {
+  requestAnimationFrame(loop);
+  let raw = (ts - lastTs) / 1000;
+  lastTs = ts;
+  if (raw > 0.1) raw = 0.1;
+  let dt = raw;
+  if (state.slowMo.remaining > 0) dt *= state.slowMo.scale;
+  if (state.hitPauseRemaining > 0) { state.hitPauseRemaining = Math.max(0, state.hitPauseRemaining - raw); dt = 0; }
+  if (state.running) update(dt);
+
+  // render
+  composer.render();
+}
+
+function fitRenderer() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  fxaa.material.uniforms['resolution'].value.set(1 / (w * Math.min(devicePixelRatio,2)), 1 / (h * Math.min(devicePixelRatio,2)));
+}
+window.addEventListener('resize', fitRenderer);
+
+// ========== LIFECYCLE ==========
+function restart() {
+  state.running = false; state.finished = false;
+  state.time = 0; state.wave = 0;
+  state.hitPauseRemaining = 0;
+  state.shake = { mag: 0, t: 0 };
+  state.slowMo = { remaining: 0, scale: 1 };
+  state.flashImpact = 0;
+  state.finisherCount = 0;
+  state.score = 0;
+  combo.points = 0; combo.rank = 'None'; refreshRank();
+
+  for (const e of state.enemies) scene.remove(e.mesh);
+  state.enemies = []; state.particles = []; state.floaters = [];
+
+  if (!player.mesh) {
+    player.mesh = makeWatermelon();
+    scene.add(player.mesh);
+  }
+  player.mesh.position.set(0, 0, 0);
+  player.facing.set(0, 0, 1);
+  player.hp = CFG.player.hp;
+  player.attackCdRemaining = 0;
+  player.attackVisualRemaining = 0;
+  player.iframesRemaining = 0;
+  player.dodgeRemaining = 0; player.dodgeCdRemaining = 0;
+
+  $('wave-num').textContent = '1';
+  $('enemy-count').textContent = '0';
+  $('enemy-hp').style.width = '0%';
+  $('player-hp').style.width = '100%';
+  $('end-overlay').classList.add('hidden');
+  $('start-overlay').classList.add('hidden');
+  camRig.finisherCamActive = false;
+
+  state.running = true;
+  Audio.init();
+  Audio.waveStart();
+}
+
+function endRun(victory) {
+  if (state.finished) return;
+  state.finished = true; state.running = false;
+  setTimeout(() => {
+    $('end-title').textContent = victory ? 'JUICED.' : 'YOU GOT PEELED.';
+    $('end-message').textContent = victory
+      ? 'All waves cleared. The orchard is yours.'
+      : 'The bananas got you. Run it back.';
+    $('end-rank').textContent = combo.rank === 'None' ? 'D' : combo.rank;
+    $('end-score').textContent = Math.round(combo.points);
+    $('end-finishers').textContent = state.finisherCount;
+    $('end-overlay').classList.remove('hidden');
+  }, 250);
+}
+
+// ========== INIT ==========
+function init() {
+  bindKeyboard();
+  bindTouch();
+  fitRenderer();
+
+  // pre-warm watermelon so the first frame after Play isn't slow
+  player.mesh = makeWatermelon();
+  scene.add(player.mesh);
+
+  $('start-btn').addEventListener('click', () => { Audio.init(); restart(); });
+  $('end-restart').addEventListener('click', restart);
+
+  $('loading').classList.add('hidden');
+  requestAnimationFrame(ts => { lastTs = ts; requestAnimationFrame(loop); });
+}
+init();
+</script>
+</body>
+</html>

@@ -1,9 +1,10 @@
 // Fruitality service worker — offline-first cache for the prototype.
-const CACHE = 'fruitality-prototype-v2';
+const CACHE = 'fruitality-prototype-v3';
 const ASSETS = [
   '/',
   'index.html',
   'play.html',
+  'play3d.html',
   'manifest.webmanifest',
   'assets/master-roster.png',
   'assets/watermelon.png',
