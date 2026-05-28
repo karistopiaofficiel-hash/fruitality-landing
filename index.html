@@ -44,11 +44,14 @@
     .hero::before {
       content: '';
       position: absolute; inset: 0;
-      background-image: url('assets/watermelon.png');
+      background-image: url('assets/master-roster.png');
       background-size: cover;
-      background-position: center 30%;
+      background-position: center center;
       filter: saturate(1.1);
       z-index: 0;
+    }
+    @media (max-width: 640px) {
+      .hero::before { background-image: url('assets/watermelon.png'); background-position: center 30%; }
     }
     .hero::after {
       content: '';
@@ -80,6 +83,23 @@
       letter-spacing: -0.04em;
       font-weight: 900;
       text-shadow: 0 4px 24px rgba(0,0,0,0.8);
+    }
+    .logo {
+      display: block;
+      max-width: min(560px, 80vw);
+      width: 100%;
+      height: auto;
+      margin: 0 auto 1rem;
+      filter: drop-shadow(0 8px 30px rgba(0,0,0,0.8));
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
     }
     .tagline {
       font-size: clamp(1.05rem, 2.5vw, 1.4rem);
@@ -294,7 +314,8 @@
   <header class="hero" aria-label="FRUITALITY hero">
     <div class="hero__inner">
       <span class="badge">Coming soon · Mobile · Mac · PC</span>
-      <h1>FRUITALITY</h1>
+      <img src="assets/title-logo.png" alt="FRUITALITY" class="logo" />
+      <h1 class="sr-only">FRUITALITY</h1>
       <p class="tagline">Looks like Pixar. Plays like Mortal Kombat.</p>
       <p class="sub-tagline">A roguelike juicy-combat brawler. Six fruit warriors. Cinematic finishers. Every drop of blood is juice. We checked.</p>
 
