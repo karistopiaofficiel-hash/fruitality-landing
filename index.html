@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b10" />
+  <meta name="description" content="FRUITALITY — a roguelike juicy-combat brawler. Looks like Pixar. Plays like Mortal Kombat. Mobile · Mac · PC." />
+  <meta property="og:title" content="FRUITALITY — Mortal Kombat but it's fruit" />
+  <meta property="og:description" content="Looks like Pixar. Plays like Mortal Kombat. Coming soon to Mobile · Mac · PC." />
+  <meta property="og:image" content="assets/watermelon.png" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <title>FRUITALITY — coming soon</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='50%25' cy='40%25' r='60%25'%3E%3Cstop offset='0%25' stop-color='%23ffb3c6'/%3E%3Cstop offset='40%25' stop-color='%23e13c5a'/%3E%3Cstop offset='100%25' stop-color='%23601323'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='28' fill='url(%23g)' stroke='%23446623' stroke-width='4'/%3E%3Ccircle cx='22' cy='28' r='2' fill='%23000'/%3E%3Ccircle cx='38' cy='26' r='2' fill='%23000'/%3E%3Ccircle cx='30' cy='38' r='2' fill='%23000'/%3E%3Ccircle cx='44' cy='40' r='2' fill='%23000'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --bg-2: #14141d;
+      --ink: #ffffff;
+      --ink-dim: #b8b8c4;
+      --juice-melon: #e13c5a;
+      --juice-banana: #f9d43a;
+      --juice-durian: #9cb541;
+      --juice-pineapple: #f4e27a;
+      --juice-kiwi: #7bc74d;
+      --juice-coconut: #f5f2e5;
+      --teal: #2bd4d4;
+      --shadow: 0 24px 60px -16px rgba(0,0,0,0.7);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: var(--juice-banana); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ----- HERO ----- */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+      display: flex;
+      align-items: flex-end;
+      padding: 6rem 1.5rem 3rem;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: url('assets/watermelon.png');
+      background-size: cover;
+      background-position: center 30%;
+      filter: saturate(1.1);
+      z-index: 0;
+    }
+    .hero::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(10,10,15,0.2) 0%, rgba(10,10,15,0.55) 60%, rgba(10,10,15,0.98) 100%);
+      z-index: 1;
+    }
+    .hero__inner {
+      position: relative; z-index: 2;
+      max-width: 880px; margin: 0 auto;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.35rem 0.9rem;
+      border: 1px solid var(--juice-melon);
+      border-radius: 999px;
+      color: var(--juice-melon);
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      background: rgba(225,60,90,0.08);
+    }
+    h1 {
+      font-size: clamp(2.5rem, 8vw, 5.5rem);
+      line-height: 0.95;
+      margin: 0 0 1rem;
+      letter-spacing: -0.04em;
+      font-weight: 900;
+      text-shadow: 0 4px 24px rgba(0,0,0,0.8);
+    }
+    .tagline {
+      font-size: clamp(1.05rem, 2.5vw, 1.4rem);
+      color: var(--ink);
+      max-width: 36rem; margin: 0 auto 0.5rem;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.7);
+    }
+    .sub-tagline {
+      font-size: 0.95rem;
+      color: var(--ink-dim);
+      max-width: 32rem; margin: 0 auto 2.5rem;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+
+    /* ----- EMAIL CAPTURE ----- */
+    .capture {
+      display: flex; flex-wrap: wrap;
+      gap: 0.5rem;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .capture input[type=email] {
+      flex: 1 1 220px;
+      padding: 0.95rem 1.1rem;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.55);
+      color: var(--ink);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .capture input[type=email]:focus { border-color: var(--juice-melon); }
+    .capture button {
+      padding: 0.95rem 1.4rem;
+      border-radius: 12px;
+      border: none;
+      background: var(--juice-melon);
+      color: white;
+      font-weight: 800;
+      font-size: 1rem;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: transform 0.1s, background-color 0.15s;
+    }
+    .capture button:hover { background: #f24c6c; transform: translateY(-1px); }
+    .capture button:active { transform: translateY(0); }
+    .capture small {
+      flex: 1 0 100%;
+      color: var(--ink-dim);
+      font-size: 0.78rem;
+      margin-top: 0.5rem;
+    }
+
+    /* ----- SECTIONS ----- */
+    section {
+      padding: 5rem 1.5rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .section-title {
+      font-size: clamp(1.6rem, 4vw, 2.8rem);
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.5rem;
+    }
+    .section-eyebrow {
+      color: var(--juice-banana);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      margin: 0 0 1rem;
+    }
+
+    /* ----- ROSTER ----- */
+    .roster {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-top: 2rem;
+    }
+    .fighter {
+      position: relative;
+      aspect-ratio: 9 / 16;
+      border-radius: 18px;
+      overflow: hidden;
+      background: var(--bg-2);
+      box-shadow: var(--shadow);
+      transform-origin: center bottom;
+      transition: transform 0.2s, box-shadow 0.2s;
+      isolation: isolate;
+    }
+    .fighter:hover { transform: translateY(-6px) scale(1.02); box-shadow: 0 32px 80px -16px rgba(0,0,0,0.85); }
+    .fighter img {
+      width: 100%; height: 100%; object-fit: cover;
+      transition: transform 0.4s ease;
+    }
+    .fighter:hover img { transform: scale(1.05); }
+    .fighter__meta {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      padding: 1rem 1.1rem;
+      background: linear-gradient(180deg, transparent 0%, rgba(10,10,15,0.95) 70%);
+      z-index: 2;
+    }
+    .fighter__name {
+      font-weight: 900; font-size: 1.1rem; line-height: 1.1;
+      letter-spacing: -0.01em;
+      margin: 0;
+    }
+    .fighter__archetype {
+      font-size: 0.78rem; color: var(--ink-dim); margin: 0.2rem 0 0;
+    }
+    .fighter__juice {
+      position: absolute; top: 1rem; right: 1rem;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.8);
+      z-index: 3;
+    }
+    .fighter--placeholder {
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, var(--bg-2) 0%, #1d1d2a 100%);
+      color: var(--ink-dim);
+      font-size: 0.9rem;
+      padding: 1rem;
+      text-align: center;
+    }
+    .fighter--placeholder .fighter__meta { background: none; padding-top: 0; }
+
+    /* ----- TRAILER ----- */
+    .trailer-wrap {
+      max-width: 380px;
+      margin: 2rem auto 0;
+      aspect-ratio: 9 / 16;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      background: black;
+    }
+    .trailer-wrap video {
+      width: 100%; height: 100%; display: block;
+      object-fit: cover;
+    }
+    .trailer-note {
+      text-align: center;
+      color: var(--ink-dim);
+      font-size: 0.85rem;
+      margin-top: 1rem;
+    }
+
+    /* ----- PILLARS ----- */
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    .pillar {
+      padding: 1.5rem;
+      background: var(--bg-2);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .pillar h3 {
+      margin: 0 0 0.5rem;
+      font-size: 1.1rem;
+      color: var(--juice-banana);
+    }
+    .pillar p { margin: 0; color: var(--ink-dim); font-size: 0.95rem; line-height: 1.5; }
+
+    /* ----- CTA ROW ----- */
+    .ctas {
+      display: flex; flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+      margin-top: 2rem;
+    }
+    .cta {
+      padding: 0.9rem 1.4rem;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.04);
+      color: var(--ink);
+      font-weight: 700;
+      font-size: 0.95rem;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .cta:hover { border-color: var(--juice-melon); background: rgba(225,60,90,0.12); text-decoration: none; }
+
+    /* ----- FOOTER ----- */
+    footer {
+      padding: 3rem 1.5rem;
+      text-align: center;
+      color: var(--ink-dim);
+      font-size: 0.85rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    footer p { margin: 0.25rem 0; }
+
+    /* ----- RESPONSIVE ----- */
+    @media (max-width: 640px) {
+      .hero { min-height: 90vh; padding: 4rem 1rem 2rem; }
+      section { padding: 3.5rem 1rem; }
+      .roster { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+      .fighter__name { font-size: 0.95rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="hero" aria-label="FRUITALITY hero">
+    <div class="hero__inner">
+      <span class="badge">Coming soon · Mobile · Mac · PC</span>
+      <h1>FRUITALITY</h1>
+      <p class="tagline">Looks like Pixar. Plays like Mortal Kombat.</p>
+      <p class="sub-tagline">A roguelike juicy-combat brawler. Six fruit warriors. Cinematic finishers. Every drop of blood is juice. We checked.</p>
+
+      <form name="signup" method="POST" data-netlify="true" netlify-honeypot="bot-field" class="capture" action="#thanks">
+        <input type="hidden" name="form-name" value="signup" />
+        <p style="display:none;"><label>Don't fill this out: <input name="bot-field" /></label></p>
+        <input type="email" name="email" placeholder="your@email.com" required aria-label="email" />
+        <button type="submit">Get on the list →</button>
+        <small>Launch alerts only. No spam. Unsubscribe whenever.</small>
+      </form>
+    </div>
+  </header>
+
+  <section aria-labelledby="pillars-title">
+    <p class="section-eyebrow">What it is</p>
+    <h2 id="pillars-title" class="section-title">A juicy fighter you can play on the toilet.</h2>
+    <div class="pillars">
+      <div class="pillar">
+        <h3>5–15 min runs</h3>
+        <p>Roguelike loop. Pick a fighter, fight 8 waves, finish the boss, unlock more. Phone-friendly snack sessions.</p>
+      </div>
+      <div class="pillar">
+        <h3>Cinematic finishers</h3>
+        <p>Drop an enemy below 15% HP and the Fruitality lands — Cinemachine swoops, time freezes, juice geyser. Auto-clipped to share.</p>
+      </div>
+      <div class="pillar">
+        <h3>Six fruit warriors</h3>
+        <p>Each with their own juice color. Watermelon bleeds red. Banana bleeds gold. Durian stinks. Coconut breaks open like milk.</p>
+      </div>
+      <div class="pillar">
+        <h3>Cross-platform</h3>
+        <p>iOS, Android, Mac, Steam — single build pipeline. Free-to-play, cosmetic-only IAP. No pay-to-win. Ever.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="roster-title">
+    <p class="section-eyebrow">The launch roster</p>
+    <h2 id="roster-title" class="section-title">Six fighters. Six juices.</h2>
+    <div class="roster">
+
+      <div class="fighter">
+        <span class="fighter__juice" style="background:#e13c5a" title="Watermelon juice"></span>
+        <img src="assets/watermelon.png" alt="Wrecking Melon — heavy bruiser" />
+        <div class="fighter__meta">
+          <p class="fighter__name">WRECKING MELON</p>
+          <p class="fighter__archetype">Heavy bruiser · vine whips</p>
+        </div>
+      </div>
+
+      <div class="fighter">
+        <span class="fighter__juice" style="background:#f9d43a" title="Banana juice"></span>
+        <img src="assets/banana.png" alt="Banana Berserker — speed combo" />
+        <div class="fighter__meta">
+          <p class="fighter__name">BANANA BERSERKER</p>
+          <p class="fighter__archetype">Speed combo · peel boomerangs</p>
+        </div>
+      </div>
+
+      <div class="fighter">
+        <span class="fighter__juice" style="background:#9cb541" title="Durian juice"></span>
+        <img src="assets/durian.png" alt="Durian King — boss tank" />
+        <div class="fighter__meta">
+          <p class="fighter__name">DURIAN KING</p>
+          <p class="fighter__archetype">Tank · stink aura</p>
+        </div>
+      </div>
+
+      <div class="fighter">
+        <span class="fighter__juice" style="background:#f4e27a" title="Pineapple juice"></span>
+        <img src="assets/pineapple.png" alt="Pineapple Grenadier — zoner" />
+        <div class="fighter__meta">
+          <p class="fighter__name">PINEAPPLE GRENADIER</p>
+          <p class="fighter__archetype">Zoner · explosive crowns</p>
+        </div>
+      </div>
+
+      <div class="fighter">
+        <span class="fighter__juice" style="background:#7bc74d" title="Kiwi juice"></span>
+        <img src="assets/kiwi.png" alt="Kiwi Shadow — assassin" />
+        <div class="fighter__meta">
+          <p class="fighter__name">KIWI SHADOW</p>
+          <p class="fighter__archetype">Assassin · 3-hit teleport</p>
+        </div>
+      </div>
+
+      <div class="fighter">
+        <span class="fighter__juice" style="background:#f5f2e5" title="Coconut milk"></span>
+        <img src="assets/coconut.png" alt="Coconut Titan — super-armor tank" />
+        <div class="fighter__meta">
+          <p class="fighter__name">COCONUT TITAN</p>
+          <p class="fighter__archetype">Super-armor · stone hammer</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section aria-labelledby="trailer-title">
+    <p class="section-eyebrow">First glimpse</p>
+    <h2 id="trailer-title" class="section-title">Concept trailer — Wrecking Melon.</h2>
+    <div class="trailer-wrap">
+      <video src="assets/trailer.mp4" autoplay muted loop playsinline aria-label="Watermelon warrior concept trailer"></video>
+    </div>
+    <p class="trailer-note">Pre-production concept. Real gameplay drops with our prototype build.</p>
+  </section>
+
+  <section aria-labelledby="cta-title" style="text-align:center;">
+    <p class="section-eyebrow">Get involved</p>
+    <h2 id="cta-title" class="section-title">Pick your fruit. Help shape the roster.</h2>
+    <p style="color:var(--ink-dim); max-width: 36rem; margin: 0 auto;">We're building this in public. Join the Discord and you can vote on the next fighter, see weekly dev clips, and break the prototype before anyone else.</p>
+    <div class="ctas">
+      <a href="#" class="cta" data-cta="discord">🧃 Join Discord</a>
+      <a href="#" class="cta" data-cta="steam">🎮 Wishlist on Steam</a>
+      <a href="#" class="cta" data-cta="appstore">📱 App Store · coming soon</a>
+      <a href="https://www.tiktok.com" class="cta" data-cta="tiktok" target="_blank" rel="noopener">🎬 TikTok</a>
+    </div>
+  </section>
+
+  <footer>
+    <p>FRUITALITY · A solo-dev brawler built with Unity 6 + open-source tooling</p>
+    <p>© 2026 · Every drop of "blood" is fruit juice. We checked.</p>
+  </footer>
+
+  <script>
+    // Light CTA telemetry — captures into localStorage until we wire real analytics.
+    document.querySelectorAll('[data-cta]').forEach(el => {
+      el.addEventListener('click', () => {
+        const k = 'fruitality_cta_log';
+        const log = JSON.parse(localStorage.getItem(k) || '[]');
+        log.push({ cta: el.dataset.cta, at: Date.now() });
+        localStorage.setItem(k, JSON.stringify(log.slice(-50)));
+      });
+    });
+  </script>
+</body>
+</html>
