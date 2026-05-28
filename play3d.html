@@ -128,6 +128,7 @@
   <div class="spinner"></div>
   <p>Loading 3D arena…</p>
   <div id="loading-progress" class="progress">starting…</div>
+  <button id="loading-skip" style="margin-top:1.25rem; padding:.6rem 1.1rem; border-radius:10px; border:1px solid rgba(255,255,255,.25); background:transparent; color:var(--ink); font-size:.8rem; letter-spacing:.05em; cursor:pointer; opacity:0; pointer-events:none; transition:opacity .3s;">Play anyway (use fallback graphics)</button>
 </div>
 
 <script type="module">
@@ -485,7 +486,7 @@ function attachFruitHat(group, color, isPlayer) {
 }
 
 function makeFighter(juiceColor, isPlayer) {
-  if (!state.assets.ready) return null;
+  if (!state.assets.ready) return buildProceduralFighter(juiceColor, isPlayer);
   const rig = { group: null, mixer: null, actions: {}, current: 'Idle' };
   rig.group = SkeletonUtils.clone(state.assets.baseGLTF.scene);
   applyTint(rig.group, juiceColor);
@@ -994,64 +995,140 @@ function endRun(victory) {
 
 // ========== ASSET LOAD ==========
 const loadStatus = $('loading-progress');
-function setLoad(msg) { if (loadStatus) loadStatus.textContent = msg; }
+function setLoad(msg) { console.log('[load]', msg); if (loadStatus) loadStatus.textContent = msg; }
 
 const gltfLoader = new GLTFLoader();
 const rgbeLoader = new RGBELoader();
 
-async function loadAssets() {
-  // Load HDRI (non-blocking but tracked)
-  setLoad('downloading HDRI environment…');
-  await new Promise(res => {
-    rgbeLoader.load('assets/3d/env.hdr', (tex) => {
+// Fire-and-forget HDRI load. It enhances reflections but is NOT required.
+function loadHDRIBackground() {
+  console.log('[load] HDRI background fetch start');
+  rgbeLoader.load('assets/3d/env.hdr', (tex) => {
+    try {
       tex.mapping = THREE.EquirectangularReflectionMapping;
       const envMap = pmrem.fromEquirectangular(tex).texture;
       scene.environment = envMap;
       tex.dispose();
-      res();
-    }, undefined, err => { console.warn('HDRI failed', err); res(); });
-  });
+      console.log('[load] HDRI applied');
+    } catch (e) { console.warn('[load] HDRI apply failed', e); }
+  }, undefined, err => { console.warn('[load] HDRI fetch failed', err); });
+}
 
-  // Load character
-  setLoad('downloading rigged characters…');
-  await new Promise(res => {
-    gltfLoader.load('assets/3d/character.glb', (gltf) => {
-      state.assets.baseGLTF = gltf;
-      // enable shadows on all meshes
-      gltf.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-      state.assets.ready = true;
-      setLoad('ready');
-      res();
-    }, (p) => {
-      if (p.lengthComputable) setLoad(`character: ${Math.round(p.loaded/p.total*100)}%`);
-    }, err => { console.warn('GLTF failed', err); setLoad('character load failed'); res(); });
+function buildProceduralFighter(juiceColor, isPlayer) {
+  // Tight fallback fighter — rendered if the GLB never loads.
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(0.85, 32, 24),
+    new THREE.MeshStandardMaterial({ color: juiceColor, roughness: 0.4, metalness: 0.05, emissive: new THREE.Color(juiceColor).multiplyScalar(0.2), emissiveIntensity: 0.4 })
+  );
+  body.position.y = 1; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  for (let i = 0; i < 7; i++) {
+    const t = (i / 7) * Math.PI * 2;
+    const stripe = new THREE.Mesh(
+      new THREE.TorusGeometry(0.85, 0.06, 8, 32, Math.PI),
+      new THREE.MeshStandardMaterial({ color: 0x0c4f1c, roughness: 0.5 })
+    );
+    stripe.rotation.y = t; stripe.rotation.x = Math.PI / 2; stripe.position.y = 1;
+    g.add(stripe);
+  }
+  const rig = {
+    group: g, mixer: null, actions: {}, current: 'Idle',
+    play: () => {}  // no-op for fallback
+  };
+  return rig;
+}
+
+let hdriStarted = false;
+function ensureHDRI() {
+  if (hdriStarted) return;
+  hdriStarted = true;
+  loadHDRIBackground();
+}
+
+async function loadAssets() {
+  // 1) Start HDRI in the background — never blocks gameplay
+  ensureHDRI();
+
+  // 2) Load character with hard 8s timeout → fall back to procedural geometry
+  setLoad('downloading rigged characters (453 KB)…');
+  const start = performance.now();
+  const charLoaded = new Promise((res) => {
+    let done = false;
+    const finish = (ok) => { if (!done) { done = true; res(ok); } };
+    const timeoutMs = 12000;
+    const timeoutId = setTimeout(() => {
+      console.warn('[load] character load timeout → procedural fallback');
+      setLoad('slow connection — using fallback');
+      finish(false);
+    }, timeoutMs);
+    try {
+      gltfLoader.load('assets/3d/character.glb', (gltf) => {
+        clearTimeout(timeoutId);
+        state.assets.baseGLTF = gltf;
+        gltf.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
+        state.assets.ready = true;
+        setLoad(`ready (${Math.round((performance.now()-start)/100)/10}s)`);
+        finish(true);
+      }, (p) => {
+        if (p.lengthComputable) setLoad(`character: ${Math.round(p.loaded/p.total*100)}%`);
+        else setLoad(`character: ${Math.round(p.loaded/1024)} KB…`);
+      }, err => {
+        clearTimeout(timeoutId);
+        console.warn('[load] GLTF fetch failed', err);
+        setLoad('character load failed — using fallback');
+        finish(false);
+      });
+    } catch (e) {
+      clearTimeout(timeoutId);
+      console.error('[load] loader threw', e);
+      finish(false);
+    }
   });
+  return charLoaded;
 }
 
 // ========== INIT ==========
+function startGame() {
+  $('loading').classList.add('hidden');
+  $('start-overlay').classList.remove('hidden');
+}
+
 async function init() {
   bindKeyboard();
   bindTouch();
   fitRenderer();
 
-  await loadAssets();
+  // Reveal "Play anyway" after 5 seconds in case loading drags
+  const skipBtn = $('loading-skip');
+  const skipTimer = setTimeout(() => {
+    if (skipBtn) { skipBtn.style.opacity = '1'; skipBtn.style.pointerEvents = 'auto'; }
+  }, 5000);
+  skipBtn?.addEventListener('click', () => {
+    clearTimeout(skipTimer);
+    if (!player.rig) {
+      player.rig = buildProceduralFighter(CFG.juice.melon, true);
+      scene.add(player.rig.group);
+    }
+    startGame();
+  });
 
-  if (state.assets.ready) {
-    // pre-warm player rig so first scene has something on screen
-    player.rig = makeFighter(CFG.juice.melon, true);
-    scene.add(player.rig.group);
-  } else {
-    setLoad('failed — try refreshing');
-    return;
-  }
-
-  $('loading').classList.add('hidden');
-  $('start-overlay').classList.remove('hidden');
-
+  // Bind start/restart buttons up front so they're always live
   $('start-btn').addEventListener('click', () => { Audio.init(); restart(); });
   $('end-restart').addEventListener('click', restart);
 
+  // Start the render loop now so the background shows
   requestAnimationFrame(ts => { lastTs = ts; requestAnimationFrame(loop); });
+
+  try {
+    await loadAssets();
+  } catch (e) { console.error('[init] loadAssets threw', e); }
+  clearTimeout(skipTimer);
+
+  player.rig = makeFighter(CFG.juice.melon, true);
+  scene.add(player.rig.group);
+
+  startGame();
 }
 init();
 </script>
