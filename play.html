@@ -6,12 +6,15 @@
   <meta name="theme-color" content="#0b0b10" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="description" content="FRUITALITY — playable browser prototype. Wrecking Melon vs banana berserkers. Combos, finishers, juice." />
+  <meta name="apple-mobile-web-app-title" content="Fruitality" />
+  <meta name="description" content="FRUITALITY — playable browser prototype. Six fruit warriors. Durian King boss. Cinematic finishers." />
   <meta property="og:title" content="FRUITALITY — playable prototype" />
-  <meta property="og:description" content="Play the prototype in your browser. Mobile-ready." />
+  <meta property="og:description" content="Six fighters. One boss. Cinematic finishers." />
   <meta property="og:image" content="assets/master-roster.png" />
-  <title>FRUITALITY — PLAY</title>
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E🍉%3C/text%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23e13c5a'/%3E%3Ctext y='52' font-size='52'%3E🍉%3C/text%3E%3C/svg%3E" />
+  <title>FRUITALITY — PLAY</title>
   <style>
     :root {
       --bg: #07070c;
@@ -20,6 +23,10 @@
       --ink-dim: #b8b8c4;
       --juice-melon: #e13c5a;
       --juice-banana: #f9d43a;
+      --juice-durian: #9cb541;
+      --juice-pineapple: #f4e27a;
+      --juice-kiwi: #7bc74d;
+      --juice-coconut: #f5f2e5;
       --teal: #2bd4d4;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -28,8 +35,7 @@
     #stage {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      background:
-        radial-gradient(ellipse at center, #1a0d18 0%, #07070c 60%) center/cover no-repeat;
+      background: radial-gradient(ellipse at center, #1a0d18 0%, #07070c 60%) center/cover no-repeat;
     }
     canvas#game {
       display: block;
@@ -40,161 +46,117 @@
       touch-action: none;
     }
 
-    /* ----- HUD ----- */
-    .hud {
-      position: fixed;
-      pointer-events: none;
-      z-index: 10;
-    }
+    /* HUD top */
+    .hud { position: fixed; pointer-events: none; z-index: 10; }
     .hud.top {
       top: 0; left: 0; right: 0;
       padding: 0.8rem 1rem;
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 1rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
     }
-    .hp-block {
-      flex: 1 1 220px;
-      max-width: 320px;
-    }
+    .hp-block { flex: 1 1 220px; max-width: 320px; }
     .hp-label {
-      font-size: 0.62rem;
-      letter-spacing: 0.18em;
-      color: var(--ink-dim);
-      text-transform: uppercase;
-      margin-bottom: 4px;
+      font-size: 0.62rem; letter-spacing: 0.18em; color: var(--ink-dim);
+      text-transform: uppercase; margin-bottom: 4px;
       text-shadow: 0 1px 3px rgba(0,0,0,0.8);
     }
-    .hp-bar {
-      height: 14px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.08);
-      overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.12);
-    }
+    .hp-bar { height: 14px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
     .hp-fill {
-      height: 100%; width: 100%;
-      border-radius: 999px;
+      height: 100%; width: 100%; border-radius: 999px;
       transition: width 0.18s ease-out, background-color 0.2s;
       box-shadow: 0 0 12px currentColor;
     }
-    .combo-center {
-      flex: 0 0 auto;
-      text-align: center;
-      min-width: 140px;
-    }
+    .combo-center { flex: 0 0 auto; text-align: center; min-width: 140px; }
     .combo-rank {
       font-weight: 900;
       font-size: clamp(1.5rem, 4vw, 2.2rem);
-      letter-spacing: -0.02em;
-      color: var(--juice-banana);
+      letter-spacing: -0.02em; color: var(--juice-banana);
       text-shadow: 0 2px 8px rgba(0,0,0,0.9);
       line-height: 1;
       transition: transform 0.15s, color 0.2s;
     }
     .combo-rank.beat { transform: scale(1.18); }
-    .combo-points {
-      font-size: 0.65rem;
-      letter-spacing: 0.18em;
-      color: var(--ink-dim);
-      text-transform: uppercase;
-      margin-top: 4px;
-    }
+    .combo-points { font-size: 0.65rem; letter-spacing: 0.18em; color: var(--ink-dim); text-transform: uppercase; margin-top: 4px; }
 
-    /* ----- BANNERS ----- */
+    /* Banners + toasts */
     .banner {
-      position: fixed;
-      top: 50%; left: 50%;
+      position: fixed; top: 50%; left: 50%;
       transform: translate(-50%, -50%) scale(0.8);
       opacity: 0;
       font-size: clamp(2.5rem, 9vw, 5rem);
-      font-weight: 900;
-      letter-spacing: -0.03em;
+      font-weight: 900; letter-spacing: -0.03em;
       color: var(--juice-melon);
       text-shadow: 0 4px 30px rgba(225,60,90,0.6), 0 4px 12px rgba(0,0,0,0.9);
-      z-index: 20;
-      pointer-events: none;
+      z-index: 20; pointer-events: none;
       transition: opacity 0.25s, transform 0.35s cubic-bezier(.16,1.4,.43,1);
       text-align: center;
     }
-    .banner.show {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
-    }
+    .banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
     .banner small {
-      display: block;
-      font-size: 0.4em;
-      font-weight: 700;
-      letter-spacing: 0.2em;
-      color: var(--ink-dim);
-      margin-top: 0.2em;
+      display: block; font-size: 0.4em; font-weight: 700;
+      letter-spacing: 0.2em; color: var(--ink-dim); margin-top: 0.2em;
     }
+    .toast-container {
+      position: fixed; top: 80px; right: 1rem;
+      z-index: 21; pointer-events: none;
+      display: flex; flex-direction: column; gap: 0.5rem;
+      max-width: 280px;
+    }
+    .toast {
+      background: rgba(20,20,29,0.95);
+      border: 1px solid var(--juice-banana);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      box-shadow: 0 12px 30px -8px rgba(0,0,0,0.6);
+      opacity: 0; transform: translateX(120%);
+      transition: opacity 0.3s, transform 0.4s cubic-bezier(.2,1.3,.4,1);
+    }
+    .toast.show { opacity: 1; transform: translateX(0); }
+    .toast h4 {
+      margin: 0 0 0.15rem; font-size: 0.85rem; font-weight: 900;
+      letter-spacing: 0.05em; color: var(--juice-banana);
+      text-transform: uppercase;
+    }
+    .toast p { margin: 0; font-size: 0.78rem; color: var(--ink-dim); line-height: 1.4; }
 
-    /* ----- TOUCH CONTROLS ----- */
-    .touch-controls {
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      pointer-events: none;
-      z-index: 11;
-      padding: 1rem;
-      display: none;
-    }
-    @media (pointer: coarse), (max-width: 820px) {
-      .touch-controls { display: block; }
-    }
+    /* Touch controls */
+    .touch-controls { position: fixed; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 11; padding: 1rem; display: none; }
+    @media (pointer: coarse), (max-width: 820px) { .touch-controls { display: block; } }
     .joystick {
-      position: absolute;
-      left: 1.5rem; bottom: 1.5rem;
-      width: 140px; height: 140px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.08);
-      border: 2px solid rgba(255,255,255,0.14);
-      pointer-events: auto;
-      touch-action: none;
+      position: absolute; left: 1.5rem; bottom: 1.5rem;
+      width: 140px; height: 140px; border-radius: 50%;
+      background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.14);
+      pointer-events: auto; touch-action: none;
     }
     .joystick__nub {
-      position: absolute;
-      left: 50%; top: 50%;
-      width: 56px; height: 56px;
-      margin: -28px 0 0 -28px;
+      position: absolute; left: 50%; top: 50%;
+      width: 56px; height: 56px; margin: -28px 0 0 -28px;
       border-radius: 50%;
       background: rgba(225,60,90,0.55);
       border: 2px solid rgba(255,255,255,0.5);
       transition: transform 0.05s linear;
     }
     .btn-attack, .btn-fruitality {
-      position: absolute;
-      right: 1.5rem;
-      width: 96px; height: 96px;
-      border-radius: 50%;
+      position: absolute; right: 1.5rem;
+      width: 96px; height: 96px; border-radius: 50%;
       border: 3px solid rgba(255,255,255,0.7);
-      font-weight: 900;
-      font-size: 1.6rem;
-      letter-spacing: 0.04em;
-      color: white;
-      cursor: pointer;
-      pointer-events: auto;
-      touch-action: none;
+      font-weight: 900; font-size: 1.6rem;
+      color: white; cursor: pointer;
+      pointer-events: auto; touch-action: none;
       transition: transform 0.05s, background-color 0.15s;
       display: flex; align-items: center; justify-content: center;
     }
-    .btn-attack {
-      bottom: 1.5rem;
-      background: rgba(249,212,58,0.6);
-    }
+    .btn-attack { bottom: 1.5rem; background: rgba(249,212,58,0.6); }
     .btn-attack:active { transform: scale(0.92); }
     .btn-fruitality {
       bottom: calc(1.5rem + 110px);
       background: rgba(225,60,90,0.7);
       width: 80px; height: 80px;
       right: calc(1.5rem + 8px);
-      font-size: 1rem;
-      opacity: 0;
-      pointer-events: none;
+      font-size: 1rem; opacity: 0; pointer-events: none;
       transition: opacity 0.2s, transform 0.05s, box-shadow 0.15s;
     }
     .btn-fruitality.ready {
-      opacity: 1;
-      pointer-events: auto;
+      opacity: 1; pointer-events: auto;
       animation: pulse 0.8s ease-in-out infinite alternate;
     }
     @keyframes pulse {
@@ -203,98 +165,134 @@
     }
     .btn-fruitality:active { transform: scale(0.92); }
 
-    /* ----- START / END SCREENS ----- */
+    /* Overlays (start, select, end) */
     .overlay {
       position: fixed; inset: 0;
-      background: rgba(7,7,12,0.85);
+      background: rgba(7,7,12,0.92);
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
       z-index: 30;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
       padding: 2rem 1rem; text-align: center;
       transition: opacity 0.3s;
+      overflow-y: auto;
     }
     .overlay.hidden { opacity: 0; pointer-events: none; }
     .overlay h1 {
       font-size: clamp(2.4rem, 8vw, 4.5rem);
-      letter-spacing: -0.04em;
-      margin: 0;
-      font-weight: 900;
-      color: var(--juice-melon);
+      letter-spacing: -0.04em; margin: 0;
+      font-weight: 900; color: var(--juice-melon);
       text-shadow: 0 4px 30px rgba(0,0,0,0.7);
     }
     .overlay p { color: var(--ink-dim); max-width: 480px; margin: 0.5rem 0 1.5rem; font-size: 1rem; line-height: 1.5; }
     .overlay .controls {
       max-width: 440px; margin: 1rem 0 2rem;
-      color: var(--ink); font-size: 0.9rem;
-      text-align: left;
+      color: var(--ink); font-size: 0.9rem; text-align: left;
       display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1rem;
       background: rgba(255,255,255,0.04);
-      padding: 1rem 1.25rem;
-      border-radius: 12px;
+      padding: 1rem 1.25rem; border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.08);
     }
     .overlay .controls kbd {
       font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-      font-size: 0.85rem;
-      padding: 2px 6px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 6px;
+      font-size: 0.85rem; padding: 2px 6px;
+      background: rgba(255,255,255,0.1); border-radius: 6px;
       border: 1px solid rgba(255,255,255,0.16);
     }
-    .overlay button {
-      padding: 1rem 1.8rem;
-      border-radius: 14px;
-      border: none;
-      background: var(--juice-melon);
-      color: white;
-      font-weight: 800;
-      font-size: 1.05rem;
-      cursor: pointer;
-      letter-spacing: 0.02em;
+    .overlay button, .overlay .btn-link {
+      padding: 1rem 1.8rem; border-radius: 14px; border: none;
+      background: var(--juice-melon); color: white;
+      font-weight: 800; font-size: 1.05rem;
+      cursor: pointer; letter-spacing: 0.02em;
       transition: transform 0.1s, background-color 0.15s, box-shadow 0.15s;
       box-shadow: 0 12px 28px -10px rgba(225,60,90,0.7);
+      text-decoration: none; display: inline-block;
     }
-    .overlay button:hover { background: #f24c6c; transform: translateY(-1px); }
+    .overlay button:hover, .overlay .btn-link:hover { background: #f24c6c; transform: translateY(-1px); text-decoration: none; }
     .overlay button:active { transform: translateY(0) scale(0.98); }
     .overlay .secondary {
       background: transparent; color: var(--ink-dim);
-      border: 1px solid rgba(255,255,255,0.18);
-      box-shadow: none;
+      border: 1px solid rgba(255,255,255,0.18); box-shadow: none;
     }
     .overlay .button-row { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
     .end-stats { font-size: 0.95rem; color: var(--ink-dim); margin-bottom: 1.5rem; }
     .end-stats b { color: var(--juice-banana); font-weight: 800; }
-
     .badge {
-      display: inline-block;
-      padding: 0.3rem 0.85rem;
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 999px;
-      color: var(--ink-dim);
-      font-size: 0.7rem;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
+      display: inline-block; padding: 0.3rem 0.85rem;
+      border: 1px solid rgba(255,255,255,0.18); border-radius: 999px;
+      color: var(--ink-dim); font-size: 0.7rem;
+      letter-spacing: 0.18em; text-transform: uppercase;
       margin-bottom: 1.25rem;
     }
-
     .back-link {
-      position: fixed;
-      top: 0.75rem; right: 0.75rem;
-      z-index: 12;
-      color: var(--ink-dim);
-      text-decoration: none;
-      font-size: 0.75rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
+      position: fixed; top: 0.75rem; right: 0.75rem;
+      z-index: 12; color: var(--ink-dim);
+      text-decoration: none; font-size: 0.75rem;
+      letter-spacing: 0.1em; text-transform: uppercase;
       padding: 0.4rem 0.7rem;
-      background: rgba(0,0,0,0.5);
-      border-radius: 8px;
+      background: rgba(0,0,0,0.5); border-radius: 8px;
       border: 1px solid rgba(255,255,255,0.12);
     }
     .back-link:hover { color: white; }
 
-    /* Hide system UI bars on iPhone in standalone */
+    /* Character Select */
+    .select-title { font-size: clamp(1.6rem, 5vw, 2.6rem); margin: 0 0 0.4rem; font-weight: 900; letter-spacing: -0.02em; color: var(--ink); }
+    .select-sub { color: var(--ink-dim); font-size: 0.9rem; margin: 0 0 1.5rem; }
+    .meta-bar {
+      display: flex; flex-wrap: wrap; justify-content: center;
+      gap: 0.8rem 2rem;
+      max-width: 720px; margin: 0 auto 1.5rem;
+      padding: 0.6rem 1.25rem; border-radius: 999px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      font-size: 0.78rem; color: var(--ink-dim);
+    }
+    .meta-bar b { color: var(--juice-banana); font-weight: 900; }
+    .fighter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.85rem;
+      max-width: 800px; width: 100%;
+      margin-bottom: 1.5rem;
+    }
+    .fc {
+      position: relative;
+      padding: 1rem 0.85rem 1rem;
+      border-radius: 16px;
+      background: var(--bg-2);
+      border: 2px solid rgba(255,255,255,0.06);
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s;
+      text-align: left;
+    }
+    .fc:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.2); }
+    .fc.selected { border-color: var(--juice-melon); box-shadow: 0 8px 24px -8px rgba(225,60,90,0.6); }
+    .fc.locked { opacity: 0.45; cursor: not-allowed; }
+    .fc.locked:hover { transform: none; }
+    .fc__top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.45rem; }
+    .fc__emoji { font-size: 1.7rem; line-height: 1; }
+    .fc__name { font-weight: 900; font-size: 0.85rem; letter-spacing: -0.01em; line-height: 1.1; flex: 1; }
+    .fc__juice-pip { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.7); }
+    .fc__archetype { font-size: 0.72rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+    .fc__desc { font-size: 0.78rem; color: var(--ink); line-height: 1.4; opacity: 0.85; }
+    .fc__stats { display: flex; gap: 0.4rem; margin-top: 0.6rem; flex-wrap: wrap; }
+    .fc__stat { font-size: 0.62rem; color: var(--ink-dim); background: rgba(255,255,255,0.04); padding: 2px 6px; border-radius: 6px; }
+    .fc__stat b { color: var(--ink); }
+    .fc__lock {
+      position: absolute; top: 0.5rem; right: 0.5rem;
+      font-size: 1rem;
+    }
+    .fc__unlock {
+      position: absolute; bottom: 0.5rem; right: 0.6rem;
+      font-size: 0.62rem; color: var(--juice-banana);
+      font-style: italic;
+    }
+
+    /* Subtle background for char-select using master roster */
+    #select-overlay {
+      background:
+        linear-gradient(180deg, rgba(7,7,12,0.85) 0%, rgba(7,7,12,0.95) 100%),
+        url('assets/master-roster.png') center/cover no-repeat;
+    }
+
     @supports(padding: max(0px)) {
       .touch-controls { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
       .hud.top { padding-top: max(0.8rem, env(safe-area-inset-top)); }
@@ -310,7 +308,7 @@
 
   <div class="hud top">
     <div class="hp-block">
-      <div class="hp-label">🍉 Wrecking Melon</div>
+      <div class="hp-label"><span id="player-name">🍉 Wrecking Melon</span></div>
       <div class="hp-bar"><div id="player-hp" class="hp-fill" style="background:#e13c5a; color:#e13c5a;"></div></div>
     </div>
     <div class="combo-center">
@@ -318,12 +316,13 @@
       <div class="combo-points"><span id="combo-points">0</span> pts</div>
     </div>
     <div class="hp-block" style="text-align:right;">
-      <div class="hp-label">🍌 Wave <span id="wave-num">1</span> · <span id="enemy-count">0</span> left</div>
+      <div class="hp-label">Wave <span id="wave-num">1</span>/4 · <span id="enemy-count">0</span> left</div>
       <div class="hp-bar"><div id="enemy-hp" class="hp-fill" style="background:#f9d43a; color:#f9d43a; width:0%"></div></div>
     </div>
   </div>
 
   <div id="banner" class="banner" aria-live="polite"></div>
+  <div id="toasts" class="toast-container" aria-live="polite"></div>
 
   <div class="touch-controls" aria-hidden="true">
     <div id="joystick" class="joystick"><div id="joystick-nub" class="joystick__nub"></div></div>
@@ -331,57 +330,123 @@
     <button id="btn-fruitality" class="btn-fruitality" aria-label="fruitality finisher">FRUI</button>
   </div>
 
+  <!-- Start splash -->
   <div id="start-overlay" class="overlay">
-    <span class="badge">Playable prototype · vanilla canvas</span>
+    <span class="badge">Playable prototype</span>
     <h1>FRUITALITY</h1>
-    <p>Wrecking Melon vs banana berserkers. Three waves. Chain combos to climb the meter. Drop a banana below 15% juice to trigger the Fruitality.</p>
+    <p>Six fighters. Three banana waves. One Durian King boss. Cinematic finishers. Auto-clipped to share.</p>
     <div class="controls">
-      <kbd>WASD / ← ↑ → ↓</kbd><span>Move</span>
-      <kbd>Space</kbd><span>Vine-whip attack</span>
-      <kbd>F</kbd><span>Fruitality finisher (when ready)</span>
+      <kbd>WASD / arrows</kbd><span>Move</span>
+      <kbd>Space</kbd><span>Attack</span>
+      <kbd>F</kbd><span>Fruitality (when ready)</span>
       <kbd>R</kbd><span>Restart any time</span>
-      <kbd>Touch</kbd><span>Virtual joystick + attack button</span>
+      <kbd>Touch</kbd><span>Joystick + on-screen buttons</span>
     </div>
-    <button id="start-btn">▶ Play</button>
+    <button id="start-btn">▶ Pick a fighter</button>
   </div>
 
+  <!-- Character select -->
+  <div id="select-overlay" class="overlay hidden">
+    <span class="badge">Pick your fighter</span>
+    <h2 class="select-title">Choose your juice.</h2>
+    <p class="select-sub">Each fighter has a distinct kit. Unlock the rest by playing.</p>
+    <div class="meta-bar">
+      <span>🥇 Best rank <b id="meta-best">D</b></span>
+      <span>⚔ Fruitalities <b id="meta-finishers">0</b></span>
+      <span>🍉 Wins <b id="meta-wins">0</b></span>
+      <span>🎯 Best score <b id="meta-best-score">0</b></span>
+    </div>
+    <div id="fighter-grid" class="fighter-grid"></div>
+    <button id="select-start" disabled style="opacity:0.4;">▶ Enter the orchard</button>
+  </div>
+
+  <!-- End screen -->
   <div id="end-overlay" class="overlay hidden">
-    <span class="badge">Run complete</span>
+    <span class="badge" id="end-badge">Run complete</span>
     <h1 id="end-title">JUICED.</h1>
     <p id="end-message" class="end-stats">You survived the orchard.</p>
-    <p class="end-stats">Final rank: <b id="end-rank">D</b> · Score: <b id="end-score">0</b> · Fruitalities: <b id="end-finishers">0</b></p>
+    <p class="end-stats">Final rank: <b id="end-rank">D</b> · Score: <b id="end-score">0</b> · Fruitalities this run: <b id="end-finishers">0</b></p>
+    <div id="end-unlock-hint" class="end-stats" style="font-size:0.85rem;"></div>
     <div class="button-row">
       <button id="end-restart">▶ Run it back</button>
+      <button id="end-select" class="secondary">Change fighter</button>
       <button id="end-save" class="secondary">💾 Save clip</button>
       <button id="end-share" class="secondary">📤 Share</button>
     </div>
-    <p style="margin-top:1.5rem; font-size:0.78rem; color:var(--ink-dim); max-width:380px;">This is a 2D web prototype — the Unity 3D build with motion-matched combat, dismemberment, and cinematic finishers is the next phase.</p>
+    <p style="margin-top:1.5rem; font-size:0.78rem; color:var(--ink-dim); max-width:380px;">2D vanilla-JS prototype. The Unity 3D build with motion-matched combat, real dismemberment, and cinematic finishers is next phase.</p>
   </div>
 
 <script>
 (() => {
   'use strict';
 
+  // ========== ROSTER ==========
+  const FIGHTERS = [
+    {
+      id: 'melon', name: 'WRECKING MELON', emoji: '🍉', juice: '#e13c5a',
+      archetype: 'Heavy Bruiser', desc: 'Vine whips. Bleeds red. The classic.',
+      stats: { speed: 235, attackCd: 0.28, attackReach: 72, attackArc: Math.PI*0.85, damage: 14, hp: 110, iframes: 0.6 },
+      unlocked: true, finisherCry: 'JUICED!'
+    },
+    {
+      id: 'banana', name: 'BANANA BERSERKER', emoji: '🍌', juice: '#f9d43a',
+      archetype: 'Speed Combo', desc: 'Fast peel boomerangs. Glass-cannon.',
+      stats: { speed: 320, attackCd: 0.17, attackReach: 58, attackArc: Math.PI*0.7, damage: 9, hp: 75, iframes: 0.5 },
+      unlocked: false, unlockReq: 'Trigger 1 Fruitality',
+      finisherCry: 'PEELED!'
+    },
+    {
+      id: 'pineapple', name: 'PINEAPPLE GRENADIER', emoji: '🍍', juice: '#f4e27a',
+      archetype: 'Zoner', desc: 'Big reach, slower swing.',
+      stats: { speed: 200, attackCd: 0.36, attackReach: 100, attackArc: Math.PI*0.55, damage: 18, hp: 95, iframes: 0.65 },
+      unlocked: false, unlockReq: 'Trigger 5 lifetime Fruitalities',
+      finisherCry: 'PINNED!'
+    },
+    {
+      id: 'kiwi', name: 'KIWI SHADOW', emoji: '🥝', juice: '#7bc74d',
+      archetype: 'Assassin', desc: 'Tight arc, lethal damage.',
+      stats: { speed: 290, attackCd: 0.22, attackReach: 55, attackArc: Math.PI*0.45, damage: 22, hp: 65, iframes: 0.55 },
+      unlocked: false, unlockReq: 'Win one run',
+      finisherCry: 'SHREDDED!'
+    },
+    {
+      id: 'coconut', name: 'COCONUT TITAN', emoji: '🥥', juice: '#f5f2e5',
+      archetype: 'Super-Armor', desc: 'Slow. Tanky. Crushing damage.',
+      stats: { speed: 175, attackCd: 0.42, attackReach: 78, attackArc: Math.PI*0.9, damage: 24, hp: 150, iframes: 0.8 },
+      unlocked: false, unlockReq: 'Trigger 10 lifetime Fruitalities',
+      finisherCry: 'CRACKED!'
+    },
+    {
+      id: 'durian', name: 'DURIAN KING (playable)', emoji: '👑', juice: '#9cb541',
+      archetype: 'God Tier', desc: 'Spike mace. The boss, on your side.',
+      stats: { speed: 215, attackCd: 0.30, attackReach: 82, attackArc: Math.PI*0.8, damage: 20, hp: 140, iframes: 0.7 },
+      unlocked: false, unlockReq: 'Defeat the Durian King boss',
+      finisherCry: 'DETHRONED!'
+    }
+  ];
+
+  // ========== ENEMIES ==========
+  const ENEMIES = {
+    banana:    { emoji: '🍌', hp: 50,  speed: 110, damage: 8,  attackCd: 1.0, attackReach: 36, juice: '#f9d43a', size: 20 },
+    rotten:    { emoji: '🍌', hp: 32,  speed: 170, damage: 7,  attackCd: 0.7, attackReach: 32, juice: '#9bb541', size: 18, tint: 'rotten' },
+    big:       { emoji: '🍌', hp: 95,  speed: 78,  damage: 14, attackCd: 1.3, attackReach: 44, juice: '#f9d43a', size: 32, scale: 1.55 },
+    durianKing:{ emoji: '👑', hp: 320, speed: 80,  damage: 22, attackCd: 1.7, attackReach: 60, juice: '#9cb541', size: 38, scale: 1.85, isBoss: true, projectile: true, stinkRadius: 110 }
+  };
+
+  // ========== WAVES ==========
+  const WAVES = [
+    { label: 'WAVE 1 · BANANAS', spawns: [['banana', 3]] },
+    { label: 'WAVE 2 · ROT SETS IN', spawns: [['banana', 4], ['rotten', 2]] },
+    { label: 'WAVE 3 · HEAVY YIELD', spawns: [['banana', 3], ['rotten', 2], ['big', 2]] },
+    { label: 'WAVE 4 · THE DURIAN KING', spawns: [['durianKing', 1], ['rotten', 2]] }
+  ];
+
   // ========== CONFIG ==========
   const CFG = {
     canvasW: 960, canvasH: 600,
     arena: { padding: 40 },
-    player: {
-      radius: 22, speed: 240, attackCooldown: 0.28,
-      attackReach: 70, attackArc: Math.PI * 0.85,
-      attackDamage: 14,
-      finisherDamage: 9999,
-      maxHp: 100,
-      iframesOnHit: 0.6
-    },
-    enemy: {
-      radius: 20, speed: 110,
-      attackCooldown: 1.0, attackDamage: 8,
-      attackReach: 36,
-      maxHp: 50,
-      knockbackPx: 70,
-      finisherThreshold: 0.15
-    },
+    player: { finisherDamage: 9999 },
+    enemy: { knockbackPx: 70, finisherThreshold: 0.15 },
     combo: {
       decayPerSecond: 9, gracePeriod: 1.1,
       pointsHit: 6, pointsFinisher: 60,
@@ -395,19 +460,49 @@
         { rank: 'JUICEMASTER', t: 360 }
       ]
     },
-    waves: [
-      { count: 3 },
-      { count: 5 },
-      { count: 7 }
-    ],
-    juice: {
-      melon: '#e13c5a',
-      banana: '#f9d43a',
-      pulp: '#ffd1dc'
-    },
     hitPause: { normal: 0.08, finisher: 0.45 },
     cameraShake: { magnitude: 9, duration: 0.18 }
   };
+
+  // ========== META (localStorage) ==========
+  const META_KEY = 'fruitality_meta_v1';
+  const META = {
+    data: {
+      bestRank: 'None',
+      bestScore: 0,
+      lifetimeFinishers: 0,
+      wins: 0,
+      runs: 0,
+      defeatedDurianKing: false,
+      unlocks: { melon: true, banana: false, pineapple: false, kiwi: false, coconut: false, durian: false },
+      seenToasts: {}
+    },
+    load() {
+      try {
+        const raw = localStorage.getItem(META_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        this.data = { ...this.data, ...parsed, unlocks: { ...this.data.unlocks, ...(parsed.unlocks || {}) } };
+      } catch (e) {}
+    },
+    save() {
+      try { localStorage.setItem(META_KEY, JSON.stringify(this.data)); } catch (e) {}
+    },
+    checkUnlocks() {
+      const d = this.data;
+      const newly = [];
+      const ensure = (id, cond, label) => {
+        if (!d.unlocks[id] && cond) { d.unlocks[id] = true; newly.push({ id, label }); }
+      };
+      ensure('banana',    d.lifetimeFinishers >= 1,                  '🍌 Banana Berserker unlocked!');
+      ensure('pineapple', d.lifetimeFinishers >= 5,                  '🍍 Pineapple Grenadier unlocked!');
+      ensure('kiwi',      d.wins >= 1,                                '🥝 Kiwi Shadow unlocked!');
+      ensure('coconut',   d.lifetimeFinishers >= 10,                  '🥥 Coconut Titan unlocked!');
+      ensure('durian',    d.defeatedDurianKing,                       '👑 Durian King unlocked!');
+      return newly;
+    }
+  };
+  META.load();
 
   // ========== STATE ==========
   const canvas = document.getElementById('game');
@@ -415,51 +510,40 @@
   ctx.imageSmoothingEnabled = true;
 
   const state = {
-    running: false,
-    finished: false,
-    time: 0,
-    dtRaw: 0, dt: 0,
+    running: false, finished: false,
+    time: 0, dtRaw: 0, dt: 0,
     hitPauseRemaining: 0,
     shake: { magnitude: 0, remaining: 0 },
     flash: 0,
     slowMo: { remaining: 0, scale: 1 },
     wave: 0,
-    enemies: [],
-    particles: [],
-    floaters: [],
+    enemies: [], particles: [], floaters: [], stinkPuffs: [],
     finisherCount: 0,
     score: 0,
     keys: new Set(),
-    pointerAttackRequested: false,
-    pointerFinisherRequested: false,
     joystickVec: { x: 0, y: 0 },
-    recorder: null,
-    recordedChunks: [],
-    recordingStream: null,
-    streamMime: null,
+    recorder: null, recordedChunks: [], recordingStream: null, streamMime: null,
     finalBlob: null,
     bannerTimer: 0,
-    playerStartFreshTime: 0,
-    waveStartTime: 0
+    fighter: FIGHTERS[0]
   };
 
   const player = {
     x: CFG.canvasW / 2, y: CFG.canvasH / 2,
-    vx: 0, vy: 0,
-    facing: 0,
-    hp: CFG.player.maxHp,
+    vx: 0, vy: 0, facing: 0,
+    hp: 110, maxHp: 110,
     attackCdRemaining: 0,
     attackVisualRemaining: 0,
     iframesRemaining: 0,
-    swingDir: 0
+    swingDir: 0,
+    stats: FIGHTERS[0].stats
   };
 
   const combo = { points: 0, rank: 'None', lastHitTime: -10 };
 
   // ========== AUDIO ==========
   const Audio = {
-    ctx: null,
-    enabled: false,
+    ctx: null, enabled: false,
     init() {
       try {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -477,42 +561,56 @@
       g.gain.setValueAtTime(gain, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       o.connect(g).connect(this.ctx.destination);
-      o.start(t);
-      o.stop(t + dur + 0.02);
+      o.start(t); o.stop(t + dur + 0.02);
     },
-    hit()        { this.blip({ freq: 220, dur: 0.06, type: 'square', gain: 0.18, sweep: -180 }); },
+    hit()        { this.blip({ freq: 220, dur: 0.06, type: 'square',   gain: 0.18, sweep: -180 }); },
     heavyHit()   { this.blip({ freq: 140, dur: 0.12, type: 'sawtooth', gain: 0.22, sweep: -90 }); },
     finisher()   {
       this.blip({ freq: 80, dur: 0.5, type: 'sawtooth', gain: 0.30, sweep: -60 });
       setTimeout(() => this.blip({ freq: 60, dur: 0.7, type: 'sine', gain: 0.22, sweep: 200 }), 100);
     },
     splat()      { this.blip({ freq: 1200, dur: 0.04, type: 'triangle', gain: 0.12, sweep: -1000 }); },
-    swing()      { this.blip({ freq: 600, dur: 0.05, type: 'sawtooth', gain: 0.08, sweep: -400 }); },
-    enemyHurt()  { this.blip({ freq: 320, dur: 0.10, type: 'sine', gain: 0.10, sweep: -120 }); },
-    playerHurt() { this.blip({ freq: 110, dur: 0.18, type: 'triangle', gain: 0.20, sweep: -40 }); },
-    waveStart()  { this.blip({ freq: 660, dur: 0.20, type: 'sine', gain: 0.18, sweep: 200 }); }
+    swing()      { this.blip({ freq: 600,  dur: 0.05, type: 'sawtooth', gain: 0.08, sweep: -400 }); },
+    enemyHurt()  { this.blip({ freq: 320,  dur: 0.10, type: 'sine',     gain: 0.10, sweep: -120 }); },
+    playerHurt() { this.blip({ freq: 110,  dur: 0.18, type: 'triangle', gain: 0.20, sweep: -40 }); },
+    waveStart()  { this.blip({ freq: 660,  dur: 0.20, type: 'sine',     gain: 0.18, sweep: 200 }); },
+    bossRoar()   {
+      this.blip({ freq: 70,  dur: 0.8, type: 'sawtooth', gain: 0.35, sweep: 30 });
+      setTimeout(() => this.blip({ freq: 50, dur: 0.6, type: 'triangle', gain: 0.25, sweep: -20 }), 200);
+    },
+    achievement() {
+      this.blip({ freq: 880, dur: 0.10, type: 'triangle', gain: 0.18, sweep: 200 });
+      setTimeout(() => this.blip({ freq: 1320, dur: 0.20, type: 'triangle', gain: 0.16, sweep: 100 }), 110);
+    }
   };
+
+  // ========== HAPTICS ==========
+  function buzz(ms) {
+    if (!('vibrate' in navigator)) return;
+    try { navigator.vibrate(ms); } catch (e) {}
+  }
 
   // ========== PARTICLES ==========
   function spawnJuice({ x, y, color, count = 16, speedRange = [80, 360], lifeRange = [0.5, 1.1], gravity = 600, size = 4 }) {
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = lerp(speedRange[0], speedRange[1], Math.random());
+      const life = lerp(lifeRange[0], lifeRange[1], Math.random());
       state.particles.push({
         x, y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed - 120,
-        life: lerp(lifeRange[0], lifeRange[1], Math.random()),
-        maxLife: 0,
+        life, maxLife: life,
         color, size: size * (0.7 + Math.random() * 0.7),
         gravity
       });
-      state.particles[state.particles.length - 1].maxLife = state.particles[state.particles.length - 1].life;
     }
   }
-
   function spawnFloater(text, x, y, color = '#ffffff') {
     state.floaters.push({ text, x, y, vy: -60, life: 1.0, color });
+  }
+  function spawnStinkPuff(x, y, radius) {
+    state.stinkPuffs.push({ x, y, radius: 4, maxRadius: radius, life: 1.5, maxLife: 1.5 });
   }
 
   // ========== INPUT ==========
@@ -522,6 +620,7 @@
       const key = e.key.toLowerCase();
       if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','f','r'].includes(key)) e.preventDefault();
       k.add(key);
+      if (!state.running) return;
       if (key === 'r') restart();
       if (key === ' ') tryAttack();
       if (key === 'f') tryFinisher();
@@ -529,7 +628,6 @@
     window.addEventListener('keyup', e => { k.delete(e.key.toLowerCase()); });
     window.addEventListener('blur', () => k.clear());
   }
-
   function readKeyboardVec() {
     let dx = 0, dy = 0;
     const k = state.keys;
@@ -541,7 +639,6 @@
     if (m > 0) { dx /= m; dy /= m; }
     return { x: dx, y: dy };
   }
-
   function bindTouch() {
     const joy = document.getElementById('joystick');
     const nub = document.getElementById('joystick-nub');
@@ -549,7 +646,6 @@
     const btnFin = document.getElementById('btn-fruitality');
     let activeId = null;
     const radius = 70;
-
     function setNub(dx, dy) {
       nub.style.transform = `translate(${dx}px, ${dy}px)`;
       const m = Math.hypot(dx, dy);
@@ -558,20 +654,16 @@
       state.joystickVec = { x: norm.x * strength, y: norm.y * strength };
     }
     function reset() { setNub(0, 0); activeId = null; }
-
     joy.addEventListener('touchstart', e => {
       if (activeId !== null) return;
-      const t = e.changedTouches[0];
-      activeId = t.identifier;
+      const t = e.changedTouches[0]; activeId = t.identifier;
       const rect = joy.getBoundingClientRect();
       const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
       let dx = t.clientX - cx, dy = t.clientY - cy;
       const m = Math.hypot(dx, dy);
       if (m > radius) { dx = dx / m * radius; dy = dy / m * radius; }
-      setNub(dx, dy);
-      e.preventDefault();
+      setNub(dx, dy); e.preventDefault();
     }, { passive: false });
-
     joy.addEventListener('touchmove', e => {
       if (activeId === null) return;
       for (const t of e.changedTouches) {
@@ -585,62 +677,56 @@
       }
       e.preventDefault();
     }, { passive: false });
-
     function endTouch(e) {
-      for (const t of e.changedTouches) {
-        if (t.identifier === activeId) reset();
-      }
+      for (const t of e.changedTouches) if (t.identifier === activeId) reset();
     }
     joy.addEventListener('touchend', endTouch);
     joy.addEventListener('touchcancel', endTouch);
-
     btnAtt.addEventListener('touchstart', e => { e.preventDefault(); tryAttack(); }, { passive: false });
     btnAtt.addEventListener('click', e => { e.preventDefault(); tryAttack(); });
     btnFin.addEventListener('touchstart', e => { e.preventDefault(); tryFinisher(); }, { passive: false });
     btnFin.addEventListener('click', e => { e.preventDefault(); tryFinisher(); });
   }
 
-  // ========== ENEMY ==========
-  function spawnEnemy() {
-    // pick an edge point
+  // ========== ENEMIES ==========
+  function spawnEnemy(typeId) {
+    const t = ENEMIES[typeId];
+    if (!t) return;
     const edge = Math.floor(Math.random() * 4);
-    let x, y;
-    const pad = 40;
+    let x, y; const pad = 40;
     if (edge === 0) { x = pad + Math.random() * (CFG.canvasW - pad*2); y = pad; }
     else if (edge === 1) { x = CFG.canvasW - pad; y = pad + Math.random() * (CFG.canvasH - pad*2); }
     else if (edge === 2) { x = pad + Math.random() * (CFG.canvasW - pad*2); y = CFG.canvasH - pad; }
     else { x = pad; y = pad + Math.random() * (CFG.canvasH - pad*2); }
-
     state.enemies.push({
+      type: typeId, def: t,
       x, y, vx: 0, vy: 0,
-      hp: CFG.enemy.maxHp,
-      maxHp: CFG.enemy.maxHp,
+      hp: t.hp, maxHp: t.hp,
       attackCdRemaining: 0.5 + Math.random() * 1.2,
-      damageFlash: 0,
-      facing: Math.atan2(player.y - y, player.x - x),
-      spawnTime: state.time,
-      spawnFade: 1.0
+      damageFlash: 0, facing: 0, spawnFade: 1.0,
+      // boss state
+      isBoss: !!t.isBoss,
+      bossPhaseTimer: 1.2,
+      bossTelegraph: 0, bossSlamPending: false,
+      // visual flag
+      size: t.size, scale: t.scale || 1, tint: t.tint || null
     });
+    if (t.isBoss) Audio.bossRoar();
   }
 
-  // ========== CORE GAMEPLAY ==========
+  // ========== ATTACK ==========
   function tryAttack() {
     if (!state.running) return;
     if (player.attackCdRemaining > 0) return;
-    player.attackCdRemaining = CFG.player.attackCooldown;
+    player.attackCdRemaining = player.stats.attackCd;
     player.attackVisualRemaining = 0.18;
-    // facing direction: use joystick if moving, otherwise last facing
-    const vec = state.joystickVec.x || state.joystickVec.y
-      ? state.joystickVec
-      : readKeyboardVec();
+    const vec = state.joystickVec.x || state.joystickVec.y ? state.joystickVec : readKeyboardVec();
     if (vec.x || vec.y) player.facing = Math.atan2(vec.y, vec.x);
     player.swingDir = player.facing;
     Audio.swing();
 
-    // hit detection — any enemy within reach & arc
-    const reach = CFG.player.attackReach;
-    const arc = CFG.player.attackArc;
-    let anyHit = false;
+    const reach = player.stats.attackReach;
+    const arc = player.stats.attackArc;
     for (const e of state.enemies) {
       const dx = e.x - player.x, dy = e.y - player.y;
       const d = Math.hypot(dx, dy);
@@ -649,24 +735,22 @@
       const delta = Math.atan2(Math.sin(ang - player.facing), Math.cos(ang - player.facing));
       if (Math.abs(delta) > arc/2) continue;
 
-      e.hp -= CFG.player.attackDamage;
+      e.hp -= player.stats.damage;
       e.damageFlash = 0.18;
-      // knockback
-      const kbx = Math.cos(ang) * 90;
-      const kby = Math.sin(ang) * 90;
-      e.vx += kbx; e.vy += kby;
-      // juice burst
-      spawnJuice({ x: e.x, y: e.y, color: CFG.juice.banana, count: 12 });
-      spawnFloater(`+${CFG.player.attackDamage}`, e.x, e.y - 18, '#fff');
+      e.vx += Math.cos(ang) * 90;
+      e.vy += Math.sin(ang) * 90;
+      spawnJuice({ x: e.x, y: e.y, color: e.def.juice, count: 12 });
+      spawnFloater(`+${player.stats.damage}`, e.x, e.y - 18, '#fff');
       Audio.hit(); Audio.enemyHurt(); Audio.splat();
-      anyHit = true;
+      buzz(15);
       addComboPoints(CFG.combo.pointsHit);
       state.hitPauseRemaining = CFG.hitPause.normal;
       shake(CFG.cameraShake.magnitude, CFG.cameraShake.duration);
 
       if (e.hp <= 0) {
-        spawnJuice({ x: e.x, y: e.y, color: CFG.juice.banana, count: 36, speedRange: [180, 520], lifeRange: [0.8, 1.4], size: 6 });
+        spawnJuice({ x: e.x, y: e.y, color: e.def.juice, count: 36, speedRange: [180, 520], lifeRange: [0.8, 1.4], size: 6 });
         Audio.heavyHit();
+        buzz([30, 20, 40]);
       }
     }
     state.enemies = state.enemies.filter(e => e.hp > 0);
@@ -674,10 +758,8 @@
 
   function tryFinisher() {
     if (!state.running) return;
-    // find a finishable enemy nearby
-    const r = CFG.player.attackReach * 1.5;
-    let target = null;
-    let bestDist = Infinity;
+    const r = player.stats.attackReach * 1.5;
+    let target = null, bestDist = Infinity;
     for (const e of state.enemies) {
       const d = Math.hypot(e.x - player.x, e.y - player.y);
       if (d > r) continue;
@@ -687,17 +769,26 @@
     if (!target) return;
 
     state.finisherCount += 1;
+    META.data.lifetimeFinishers += 1;
     addComboPoints(CFG.combo.pointsFinisher);
     state.hitPauseRemaining = CFG.hitPause.finisher;
     state.slowMo = { remaining: 0.55, scale: 0.35 };
     state.flash = 0.6;
     shake(20, 0.45);
     Audio.finisher();
-    spawnJuice({ x: target.x, y: target.y, color: CFG.juice.banana, count: 80, speedRange: [220, 720], lifeRange: [1.0, 1.8], size: 7, gravity: 380 });
-    spawnFloater('FRUITALITY!', target.x, target.y - 30, CFG.juice.melon);
+    buzz([50, 30, 80, 30, 100]);
+    spawnJuice({ x: target.x, y: target.y, color: target.def.juice, count: 80, speedRange: [220, 720], lifeRange: [1.0, 1.8], size: 7, gravity: 380 });
+    spawnFloater(state.fighter.finisherCry || 'FRUITALITY!', target.x, target.y - 30, CFG.juice ? CFG.juice.melon : '#e13c5a');
 
+    if (target.isBoss) {
+      META.data.defeatedDurianKing = true;
+      showBanner('DURIAN DETHRONED', 'BOSS KILLED');
+    } else {
+      showBanner('FRUITALITY', '+60 STYLE · CLIP SAVED');
+    }
     target.hp = -1;
-    showBanner('FRUITALITY', '+60 STYLE · CLIP SAVED');
+    META.save();
+    checkAndShowUnlocks();
   }
 
   function addComboPoints(p) {
@@ -705,7 +796,6 @@
     combo.lastHitTime = state.time;
     refreshRank();
   }
-
   function refreshRank() {
     const prev = combo.rank;
     let next = 'None';
@@ -719,23 +809,44 @@
       el.classList.add('beat');
       setTimeout(() => el.classList.remove('beat'), 200);
       const goldRanks = ['S', 'SS', 'JUICEMASTER'];
-      el.style.color = next === 'JUICEMASTER' ? CFG.juice.melon
+      el.style.color = next === 'JUICEMASTER' ? '#e13c5a'
                      : goldRanks.includes(next) ? '#ffce4d'
-                     : CFG.juice.banana;
+                     : '#f9d43a';
     }
     document.getElementById('combo-points').textContent = Math.round(combo.points);
   }
-
   function shake(mag, dur) {
     state.shake.magnitude = Math.max(state.shake.magnitude, mag);
     state.shake.remaining = Math.max(state.shake.remaining, dur);
   }
-
   function showBanner(text, sub = '') {
     const b = document.getElementById('banner');
     b.innerHTML = text + (sub ? `<small>${sub}</small>` : '');
     b.classList.add('show');
     state.bannerTimer = 1.6;
+  }
+
+  // ========== TOASTS / ACHIEVEMENTS ==========
+  function showToast(title, body, key) {
+    if (key && META.data.seenToasts && META.data.seenToasts[key]) return;
+    if (key) { META.data.seenToasts = META.data.seenToasts || {}; META.data.seenToasts[key] = true; META.save(); }
+    const container = document.getElementById('toasts');
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = `<h4>${title}</h4><p>${body}</p>`;
+    container.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    Audio.achievement();
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 500);
+    }, 3800);
+  }
+  function checkAndShowUnlocks() {
+    const newly = META.checkUnlocks();
+    META.save();
+    for (const u of newly) showToast('UNLOCKED', u.label, `unlock:${u.id}`);
+    return newly;
   }
 
   // ========== UPDATE / RENDER ==========
@@ -746,19 +857,15 @@
       if (state.bannerTimer <= 0) document.getElementById('banner').classList.remove('show');
     }
 
-    // input vector — joystick takes priority if active, else keyboard
-    let move = state.joystickVec.x || state.joystickVec.y
-      ? state.joystickVec
-      : readKeyboardVec();
-
-    const speed = CFG.player.speed;
+    // input
+    let move = state.joystickVec.x || state.joystickVec.y ? state.joystickVec : readKeyboardVec();
+    const speed = player.stats.speed;
     player.vx = move.x * speed;
     player.vy = move.y * speed;
     player.x += player.vx * dt;
     player.y += player.vy * dt;
     if (Math.hypot(move.x, move.y) > 0.1) player.facing = Math.atan2(move.y, move.x);
 
-    // bounds
     const pad = CFG.arena.padding;
     player.x = clamp(player.x, pad, CFG.canvasW - pad);
     player.y = clamp(player.y, pad, CFG.canvasH - pad);
@@ -769,59 +876,61 @@
 
     // enemies
     for (const e of state.enemies) {
-      // spawn fade
       if (e.spawnFade > 0) e.spawnFade = Math.max(0, e.spawnFade - dt * 2);
       e.damageFlash = Math.max(0, e.damageFlash - dt);
       e.attackCdRemaining -= dt;
-      e.size = CFG.enemy.radius;
+      // friction
+      e.vx *= Math.pow(0.001, dt); e.vy *= Math.pow(0.001, dt);
 
-      // friction on knockback
-      e.vx *= Math.pow(0.001, dt);
-      e.vy *= Math.pow(0.001, dt);
-
-      // chase
       const dx = player.x - e.x, dy = player.y - e.y;
       const dist = Math.hypot(dx, dy);
       e.facing = Math.atan2(dy, dx);
-      if (dist > CFG.enemy.attackReach + 4) {
-        e.vx += (dx / dist) * CFG.enemy.speed * dt * 6;
-        e.vy += (dy / dist) * CFG.enemy.speed * dt * 6;
-      }
-      const desired = CFG.enemy.speed;
-      const v = Math.hypot(e.vx, e.vy);
-      if (v > desired) { e.vx = e.vx / v * desired; e.vy = e.vy / v * desired; }
-      e.x += e.vx * dt;
-      e.y += e.vy * dt;
-      e.x = clamp(e.x, pad, CFG.canvasW - pad);
-      e.y = clamp(e.y, pad, CFG.canvasH - pad);
 
-      // attack
-      if (dist <= CFG.enemy.attackReach + 4 && e.attackCdRemaining <= 0) {
-        e.attackCdRemaining = CFG.enemy.attackCooldown;
-        if (player.iframesRemaining <= 0 && !state.finished) {
-          player.hp -= CFG.enemy.attackDamage;
-          player.iframesRemaining = CFG.player.iframesOnHit;
-          spawnJuice({ x: player.x, y: player.y, color: CFG.juice.melon, count: 10 });
-          spawnFloater(`-${CFG.enemy.attackDamage}`, player.x, player.y - 18, CFG.juice.melon);
-          Audio.playerHurt();
-          shake(14, 0.22);
-          if (player.hp <= 0) endRun(false);
+      if (e.isBoss) {
+        updateBoss(e, dt, dist);
+      } else {
+        if (dist > e.def.attackReach + 4) {
+          e.vx += (dx / dist) * e.def.speed * dt * 6;
+          e.vy += (dy / dist) * e.def.speed * dt * 6;
+        }
+        const desired = e.def.speed;
+        const v = Math.hypot(e.vx, e.vy);
+        if (v > desired) { e.vx = e.vx / v * desired; e.vy = e.vy / v * desired; }
+        e.x += e.vx * dt; e.y += e.vy * dt;
+        e.x = clamp(e.x, pad, CFG.canvasW - pad);
+        e.y = clamp(e.y, pad, CFG.canvasH - pad);
+
+        if (dist <= e.def.attackReach + 4 && e.attackCdRemaining <= 0) {
+          e.attackCdRemaining = e.def.attackCd;
+          damagePlayer(e.def.damage);
         }
       }
     }
 
+    // stink puffs (boss AOE)
+    for (const s of state.stinkPuffs) {
+      s.life -= dt;
+      s.radius = s.maxRadius * (1 - s.life / s.maxLife);
+      // damage check at peak
+      const peak = s.life < s.maxLife * 0.6 && s.life > s.maxLife * 0.3;
+      if (peak && !s.dealt) {
+        s.dealt = true;
+        const d = Math.hypot(player.x - s.x, player.y - s.y);
+        if (d < s.radius && player.iframesRemaining <= 0) damagePlayer(14);
+      }
+    }
+    state.stinkPuffs = state.stinkPuffs.filter(s => s.life > 0);
+
     // wave management
     if (state.enemies.length === 0 && !state.finished) {
       state.wave += 1;
-      if (state.wave > CFG.waves.length) {
-        endRun(true);
-      } else {
-        const waveCfg = CFG.waves[state.wave - 1];
-        for (let i = 0; i < waveCfg.count; i++) spawnEnemy();
+      if (state.wave > WAVES.length) { endRun(true); }
+      else {
+        const w = WAVES[state.wave - 1];
+        for (const [type, n] of w.spawns) for (let i = 0; i < n; i++) spawnEnemy(type);
         Audio.waveStart();
         document.getElementById('wave-num').textContent = state.wave;
-        showBanner(`WAVE ${state.wave}`, `${waveCfg.count} BANANAS INCOMING`);
-        state.waveStartTime = state.time;
+        showBanner(w.label.split('·')[0].trim(), (w.label.split('·')[1] || '').trim());
       }
     }
     document.getElementById('enemy-count').textContent = state.enemies.length;
@@ -834,22 +943,15 @@
 
     // particles
     for (const p of state.particles) {
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
       p.vy += p.gravity * dt;
       p.vx *= Math.pow(0.4, dt);
       p.life -= dt;
     }
     state.particles = state.particles.filter(p => p.life > 0);
-
-    // floaters
-    for (const f of state.floaters) {
-      f.y += f.vy * dt;
-      f.life -= dt;
-    }
+    for (const f of state.floaters) { f.y += f.vy * dt; f.life -= dt; }
     state.floaters = state.floaters.filter(f => f.life > 0);
 
-    // camera shake decay
     if (state.shake.remaining > 0) {
       state.shake.remaining -= dt;
       if (state.shake.remaining <= 0) state.shake.magnitude = 0;
@@ -857,111 +959,161 @@
     if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 2);
     if (state.slowMo.remaining > 0) state.slowMo.remaining -= dt;
 
-    // UI bars
-    document.getElementById('player-hp').style.width = Math.max(0, player.hp / CFG.player.maxHp * 100) + '%';
-    // strongest enemy
+    // HUD
+    document.getElementById('player-hp').style.width = Math.max(0, player.hp / player.maxHp * 100) + '%';
     let strongest = null;
     for (const e of state.enemies) if (!strongest || e.hp > strongest.hp) strongest = e;
     document.getElementById('enemy-hp').style.width = strongest ? (strongest.hp / strongest.maxHp * 100) + '%' : '0%';
 
-    // finisher button enable
     const finBtn = document.getElementById('btn-fruitality');
     const anyFinisherTarget = state.enemies.some(e => e.hp / e.maxHp <= CFG.enemy.finisherThreshold);
     if (anyFinisherTarget) finBtn.classList.add('ready');
     else finBtn.classList.remove('ready');
   }
 
+  function updateBoss(e, dt, dist) {
+    // Boss prefers to keep medium distance and telegraph slams
+    const desiredDist = 180;
+    const towards = dist > desiredDist + 30 ? 1 : (dist < desiredDist - 30 ? -1 : 0);
+    if (towards !== 0) {
+      e.vx += (player.x - e.x) / dist * e.def.speed * dt * 4 * towards;
+      e.vy += (player.y - e.y) / dist * e.def.speed * dt * 4 * towards;
+    }
+    const v = Math.hypot(e.vx, e.vy);
+    if (v > e.def.speed) { e.vx = e.vx / v * e.def.speed; e.vy = e.vy / v * e.def.speed; }
+    e.x += e.vx * dt; e.y += e.vy * dt;
+    const pad = CFG.arena.padding;
+    e.x = clamp(e.x, pad, CFG.canvasW - pad); e.y = clamp(e.y, pad, CFG.canvasH - pad);
+
+    e.bossPhaseTimer -= dt;
+    if (e.bossPhaseTimer <= 0 && e.bossTelegraph <= 0) {
+      // telegraph a stink slam at player's current position
+      e.bossTelegraph = 0.9;
+      e.telegraphX = player.x; e.telegraphY = player.y;
+      e.bossPhaseTimer = 3.0 + Math.random() * 1.6;
+    }
+    if (e.bossTelegraph > 0) {
+      e.bossTelegraph -= dt;
+      if (e.bossTelegraph <= 0) {
+        // fire the stink puff
+        spawnStinkPuff(e.telegraphX, e.telegraphY, e.def.stinkRadius);
+        shake(16, 0.3);
+        Audio.heavyHit();
+      }
+    }
+    // melee bite if in close range
+    if (dist <= e.def.attackReach + 4 && e.attackCdRemaining <= 0) {
+      e.attackCdRemaining = e.def.attackCd;
+      damagePlayer(e.def.damage);
+    }
+  }
+
+  function damagePlayer(amount) {
+    if (player.iframesRemaining > 0 || state.finished) return;
+    player.hp -= amount;
+    player.iframesRemaining = player.stats.iframes;
+    spawnJuice({ x: player.x, y: player.y, color: state.fighter.juice, count: 10 });
+    spawnFloater(`-${amount}`, player.x, player.y - 18, state.fighter.juice);
+    Audio.playerHurt();
+    buzz(40);
+    shake(14, 0.22);
+    if (player.hp <= 0) endRun(false);
+  }
+
   function render() {
-    const ctx2 = ctx;
-    // camera transform
+    const c = ctx;
     let ox = 0, oy = 0;
     if (state.shake.remaining > 0) {
       const intensity = state.shake.remaining / 0.5;
       ox = (Math.random() - 0.5) * state.shake.magnitude * intensity * 2;
       oy = (Math.random() - 0.5) * state.shake.magnitude * intensity * 2;
     }
-    ctx2.save();
-    ctx2.clearRect(0, 0, CFG.canvasW, CFG.canvasH);
-    ctx2.translate(ox, oy);
+    c.save();
+    c.clearRect(0, 0, CFG.canvasW, CFG.canvasH);
+    c.translate(ox, oy);
 
-    // background — arena
-    drawArena(ctx2);
+    drawArena(c);
+    drawStinkPuffs(c);
+    drawTelegraphs(c);
+    drawParticles(c);
 
-    // particles (under entities)
-    drawParticles(ctx2);
+    for (const e of state.enemies) drawEnemy(c, e);
+    drawPlayer(c);
+    if (player.attackVisualRemaining > 0) drawAttackArc(c);
+    drawFloaters(c);
 
-    // enemies
-    for (const e of state.enemies) drawEnemy(ctx2, e);
+    c.restore();
 
-    // player
-    drawPlayer(ctx2);
-
-    // attack arc visual
-    if (player.attackVisualRemaining > 0) drawAttackArc(ctx2);
-
-    // floaters
-    drawFloaters(ctx2);
-
-    ctx2.restore();
-
-    // flash
     if (state.flash > 0) {
-      ctx2.save();
-      ctx2.globalAlpha = state.flash * 0.5;
-      ctx2.fillStyle = '#fff';
-      ctx2.fillRect(0, 0, CFG.canvasW, CFG.canvasH);
-      ctx2.restore();
+      c.save(); c.globalAlpha = state.flash * 0.5;
+      c.fillStyle = '#fff';
+      c.fillRect(0, 0, CFG.canvasW, CFG.canvasH);
+      c.restore();
     }
   }
 
   function drawArena(c) {
-    // vignette + floor texture
     const w = CFG.canvasW, h = CFG.canvasH;
     const grad = c.createRadialGradient(w/2, h/2, 80, w/2, h/2, Math.max(w, h)*0.7);
     grad.addColorStop(0, '#1f0b18');
     grad.addColorStop(1, '#0a050a');
-    c.fillStyle = grad;
-    c.fillRect(0, 0, w, h);
-
-    // floor grid (faint)
+    c.fillStyle = grad; c.fillRect(0, 0, w, h);
     c.save();
     c.strokeStyle = 'rgba(255,80,120,0.06)';
     c.lineWidth = 1;
-    for (let x = 0; x < w; x += 60) {
-      c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke();
-    }
-    for (let y = 0; y < h; y += 60) {
-      c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke();
-    }
+    for (let x = 0; x < w; x += 60) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); }
+    for (let y = 0; y < h; y += 60) { c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); }
     c.restore();
-
-    // arena border
     c.strokeStyle = 'rgba(225,60,90,0.3)';
     c.lineWidth = 2;
     c.strokeRect(8, 8, w-16, h-16);
   }
 
+  function drawTelegraphs(c) {
+    for (const e of state.enemies) {
+      if (!e.isBoss || e.bossTelegraph <= 0) continue;
+      const t = 1 - (e.bossTelegraph / 0.9);
+      c.save();
+      c.strokeStyle = `rgba(156,181,65,${0.7 + Math.sin(state.time * 14) * 0.3})`;
+      c.lineWidth = 3;
+      c.setLineDash([6, 8]);
+      c.beginPath();
+      c.arc(e.telegraphX, e.telegraphY, e.def.stinkRadius * (0.6 + t * 0.4), 0, Math.PI*2);
+      c.stroke();
+      c.fillStyle = `rgba(156,181,65,${0.10 + 0.10 * t})`;
+      c.fill();
+      c.restore();
+    }
+  }
+
+  function drawStinkPuffs(c) {
+    for (const s of state.stinkPuffs) {
+      const a = Math.max(0, s.life / s.maxLife);
+      c.save();
+      c.globalAlpha = 0.45 * a;
+      const grad = c.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.radius);
+      grad.addColorStop(0, 'rgba(180,210,80,0.8)');
+      grad.addColorStop(1, 'rgba(60,80,30,0)');
+      c.fillStyle = grad;
+      c.beginPath(); c.arc(s.x, s.y, s.radius, 0, Math.PI*2); c.fill();
+      c.restore();
+    }
+  }
+
   function drawPlayer(c) {
     const flicker = (player.iframesRemaining > 0 && Math.floor(state.time * 18) % 2 === 0);
     if (flicker) { c.save(); c.globalAlpha = 0.45; }
-
-    // shadow
     c.fillStyle = 'rgba(0,0,0,0.4)';
-    c.beginPath(); c.ellipse(player.x, player.y + CFG.player.radius - 3, CFG.player.radius * 0.85, 6, 0, 0, Math.PI*2); c.fill();
-
-    // emoji body
+    c.beginPath(); c.ellipse(player.x, player.y + 22, 18, 6, 0, 0, Math.PI*2); c.fill();
     c.font = '52px serif';
     c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText('🍉', player.x, player.y);
-
-    // facing indicator (juice trail)
+    c.fillText(state.fighter.emoji, player.x, player.y);
     c.save();
     c.translate(player.x, player.y);
     c.rotate(player.facing);
-    c.fillStyle = CFG.juice.melon;
+    c.fillStyle = state.fighter.juice;
     c.beginPath(); c.arc(28, 0, 4, 0, Math.PI*2); c.fill();
     c.restore();
-
     if (flicker) c.restore();
   }
 
@@ -970,61 +1122,69 @@
     c.save();
     c.translate(player.x, player.y);
     c.rotate(player.swingDir);
-    const arc = CFG.player.attackArc;
-    const reach = CFG.player.attackReach;
-    c.fillStyle = `rgba(225,60,90,${0.55 * (1 - t)})`;
+    const arc = player.stats.attackArc;
+    const reach = player.stats.attackReach;
+    c.fillStyle = state.fighter.juice + 'AA';
+    c.globalAlpha = 0.55 * (1 - t);
     c.beginPath();
     c.moveTo(0, 0);
     c.arc(0, 0, reach, -arc/2, arc/2);
-    c.closePath();
-    c.fill();
-
-    // whip line (more dramatic)
-    c.strokeStyle = `rgba(245,160,200,${0.85 * (1 - t)})`;
+    c.closePath(); c.fill();
+    c.strokeStyle = state.fighter.juice;
+    c.globalAlpha = 0.85 * (1 - t);
     c.lineWidth = 4;
     c.beginPath(); c.moveTo(0, 0); c.lineTo(reach * (0.4 + t*0.7), 0); c.stroke();
     c.restore();
   }
 
   function drawEnemy(c, e) {
-    if (e.spawnFade > 0) {
-      c.save(); c.globalAlpha = 1 - e.spawnFade;
-    }
-    // shadow
+    if (e.spawnFade > 0) { c.save(); c.globalAlpha = 1 - e.spawnFade; }
     c.fillStyle = 'rgba(0,0,0,0.4)';
-    c.beginPath(); c.ellipse(e.x, e.y + CFG.enemy.radius - 2, CFG.enemy.radius * 0.85, 5, 0, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.ellipse(e.x, e.y + e.size, e.size * 0.85, 5, 0, 0, Math.PI*2); c.fill();
 
-    // emoji
     if (e.damageFlash > 0) {
       c.save();
       const flashAlpha = e.damageFlash / 0.18;
       c.shadowColor = 'rgba(255,255,255,1)';
       c.shadowBlur = 16 * flashAlpha;
     }
-    c.font = '46px serif';
+    const scale = e.scale || 1;
+    c.font = `${Math.round(46 * scale)}px serif`;
     c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText('🍌', e.x, e.y);
+    if (e.tint === 'rotten') {
+      c.save(); c.filter = 'sepia(0.6) hue-rotate(40deg) saturate(1.3)';
+      c.fillText(e.def.emoji, e.x, e.y);
+      c.restore();
+    } else {
+      c.fillText(e.def.emoji, e.x, e.y);
+    }
     if (e.damageFlash > 0) c.restore();
 
-    // tiny hp pip above
-    const w = 32, h = 4;
-    const x = e.x - w/2, y = e.y - CFG.enemy.radius - 12;
+    // boss spike crown halo
+    if (e.isBoss) {
+      c.save();
+      c.fillStyle = `rgba(156,181,65,${0.4 + Math.sin(state.time * 4) * 0.2})`;
+      c.beginPath(); c.arc(e.x, e.y, e.size * 1.4, 0, Math.PI*2); c.fill();
+      c.restore();
+    }
+
+    // hp pip
+    const w = e.isBoss ? 90 : 32, h = e.isBoss ? 6 : 4;
+    const x = e.x - w/2, y = e.y - e.size - 12;
     c.fillStyle = 'rgba(0,0,0,0.5)';
     c.fillRect(x, y, w, h);
     const ratio = Math.max(0, e.hp / e.maxHp);
-    c.fillStyle = ratio <= CFG.enemy.finisherThreshold ? CFG.juice.melon : CFG.juice.banana;
+    c.fillStyle = ratio <= CFG.enemy.finisherThreshold ? '#e13c5a' : e.def.juice;
     c.fillRect(x, y, w * ratio, h);
 
-    // FINISH PROMPT
     if (ratio <= CFG.enemy.finisherThreshold) {
       c.save();
       c.fillStyle = `rgba(225,60,90,${0.6 + Math.sin(state.time * 8) * 0.4})`;
       c.font = '900 13px Inter, system-ui';
       c.textAlign = 'center';
-      c.fillText('F · FRUITALITY', e.x, e.y - CFG.enemy.radius - 22);
+      c.fillText('F · FRUITALITY', e.x, e.y - e.size - 22);
       c.restore();
     }
-
     if (e.spawnFade > 0) c.restore();
   }
 
@@ -1047,8 +1207,7 @@
     c.font = '900 16px Inter, system-ui';
     for (const f of state.floaters) {
       const a = Math.min(1, f.life * 2);
-      c.globalAlpha = a;
-      c.fillStyle = f.color;
+      c.globalAlpha = a; c.fillStyle = f.color;
       c.fillText(f.text, f.x, f.y);
     }
     c.restore();
@@ -1070,24 +1229,18 @@
       state.streamMime = mime;
       state.recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2_500_000 });
       state.recordedChunks = [];
-      state.recorder.ondataavailable = e => {
-        if (e.data && e.data.size > 0) state.recordedChunks.push(e.data);
-      };
-      state.recorder.onstop = () => {
-        state.finalBlob = new Blob(state.recordedChunks, { type: state.streamMime });
-      };
+      state.recorder.ondataavailable = e => { if (e.data && e.data.size > 0) state.recordedChunks.push(e.data); };
+      state.recorder.onstop = () => { state.finalBlob = new Blob(state.recordedChunks, { type: state.streamMime }); };
       state.recorder.start();
-    } catch (e) { /* silent — recording is a bonus */ }
+    } catch (e) {}
   }
-  function stopRecording() {
-    try { if (state.recorder && state.recorder.state !== 'inactive') state.recorder.stop(); } catch (e) {}
-  }
+  function stopRecording() { try { if (state.recorder && state.recorder.state !== 'inactive') state.recorder.stop(); } catch (e) {} }
   function saveClip() {
     if (!state.finalBlob) return;
     const url = URL.createObjectURL(state.finalBlob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `fruitality-run-${Date.now()}.webm`;
+    a.download = `fruitality-${state.fighter.id}-${Date.now()}.webm`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
@@ -1096,21 +1249,76 @@
     const file = new File([state.finalBlob], 'fruitality-run.webm', { type: state.streamMime || 'video/webm' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: 'FRUITALITY', text: 'I just juiced some bananas. 🍉' });
+        await navigator.share({ files: [file], title: 'FRUITALITY', text: `I just juiced some bananas with ${state.fighter.name}. 🍉` });
         return;
-      } catch (e) { /* user cancelled */ }
+      } catch (e) {}
     }
     saveClip();
   }
 
+  // ========== CHARACTER SELECT ==========
+  let selectedFighterId = null;
+  function renderFighterGrid() {
+    const grid = document.getElementById('fighter-grid');
+    grid.innerHTML = '';
+    for (const f of FIGHTERS) {
+      const unlocked = META.data.unlocks[f.id];
+      const card = document.createElement('div');
+      card.className = 'fc' + (unlocked ? '' : ' locked');
+      if (selectedFighterId === f.id) card.classList.add('selected');
+      card.dataset.id = f.id;
+      card.innerHTML = `
+        <div class="fc__top">
+          <span class="fc__emoji">${f.emoji}</span>
+          <span class="fc__name">${f.name}</span>
+          <span class="fc__juice-pip" style="background:${f.juice}"></span>
+        </div>
+        <div class="fc__archetype">${f.archetype}</div>
+        <div class="fc__desc">${f.desc}</div>
+        <div class="fc__stats">
+          <span class="fc__stat">SPD <b>${Math.round(f.stats.speed/40)}</b></span>
+          <span class="fc__stat">DMG <b>${f.stats.damage}</b></span>
+          <span class="fc__stat">HP <b>${f.stats.hp}</b></span>
+        </div>
+        ${unlocked ? '' : `<div class="fc__lock">🔒</div><div class="fc__unlock">${f.unlockReq || ''}</div>`}
+      `;
+      card.addEventListener('click', () => {
+        if (!unlocked) return;
+        selectedFighterId = f.id;
+        renderFighterGrid();
+        const btn = document.getElementById('select-start');
+        btn.disabled = false; btn.style.opacity = '1';
+      });
+      grid.appendChild(card);
+    }
+  }
+  function refreshMetaBar() {
+    document.getElementById('meta-best').textContent = META.data.bestRank === 'None' ? 'D' : META.data.bestRank;
+    document.getElementById('meta-finishers').textContent = META.data.lifetimeFinishers;
+    document.getElementById('meta-wins').textContent = META.data.wins;
+    document.getElementById('meta-best-score').textContent = META.data.bestScore;
+  }
+  function showSelect() {
+    document.getElementById('start-overlay').classList.add('hidden');
+    document.getElementById('end-overlay').classList.add('hidden');
+    refreshMetaBar();
+    renderFighterGrid();
+    if (!selectedFighterId) selectedFighterId = 'melon';
+    renderFighterGrid();
+    document.getElementById('select-overlay').classList.remove('hidden');
+  }
+
   // ========== GAME LIFECYCLE ==========
+  function rankIndex(r) {
+    const order = ['None','D','C','B','A','S','SS','JUICEMASTER'];
+    return order.indexOf(r);
+  }
+
   function restart() {
     state.running = false;
     state.finished = false;
     state.time = 0;
-    state.enemies = [];
-    state.particles = [];
-    state.floaters = [];
+    state.enemies = []; state.particles = []; state.floaters = []; state.stinkPuffs = [];
     state.finisherCount = 0;
     state.score = 0;
     state.wave = 0;
@@ -1118,29 +1326,38 @@
     state.flash = 0;
     state.slowMo = { remaining: 0, scale: 1 };
     state.hitPauseRemaining = 0;
-    combo.points = 0;
-    combo.rank = 'None';
+    combo.points = 0; combo.rank = 'None';
     refreshRank();
-    player.x = CFG.canvasW / 2;
-    player.y = CFG.canvasH / 2;
-    player.hp = CFG.player.maxHp;
+
+    state.fighter = FIGHTERS.find(f => f.id === selectedFighterId) || FIGHTERS[0];
+    player.stats = state.fighter.stats;
+    player.maxHp = state.fighter.stats.hp;
+    player.hp = state.fighter.stats.hp;
+    player.x = CFG.canvasW / 2; player.y = CFG.canvasH / 2;
     player.vx = player.vy = 0;
-    player.attackCdRemaining = 0;
-    player.attackVisualRemaining = 0;
-    player.iframesRemaining = 0;
+    player.attackCdRemaining = 0; player.attackVisualRemaining = 0; player.iframesRemaining = 0;
     player.facing = 0;
+
+    document.getElementById('player-name').textContent = `${state.fighter.emoji} ${state.fighter.name}`;
+    document.getElementById('player-hp').style.background = state.fighter.juice;
+    document.getElementById('player-hp').style.color = state.fighter.juice;
     document.getElementById('wave-num').textContent = '1';
     document.getElementById('enemy-count').textContent = '0';
     document.getElementById('enemy-hp').style.width = '0%';
     document.getElementById('player-hp').style.width = '100%';
     state.finalBlob = null;
     state.recordedChunks = [];
+
     document.getElementById('end-overlay').classList.add('hidden');
     document.getElementById('start-overlay').classList.add('hidden');
+    document.getElementById('select-overlay').classList.add('hidden');
+
     state.running = true;
     Audio.init();
     Audio.waveStart();
     startRecording();
+    META.data.runs += 1;
+    META.save();
   }
 
   function endRun(victory) {
@@ -1148,18 +1365,42 @@
     state.finished = true;
     state.running = false;
     stopRecording();
-    // wait a tick so MediaRecorder finalizes
+    // meta updates
+    if (victory) META.data.wins += 1;
+    if (rankIndex(combo.rank) > rankIndex(META.data.bestRank)) META.data.bestRank = combo.rank;
+    if (Math.round(combo.points) > META.data.bestScore) META.data.bestScore = Math.round(combo.points);
+    META.save();
+    const newlyUnlocked = checkAndShowUnlocks();
+
     setTimeout(() => {
       const o = document.getElementById('end-overlay');
-      document.getElementById('end-title').textContent = victory ? 'JUICED.' : 'YOU GOT PEELED.';
+      document.getElementById('end-title').textContent = victory ? (state.fighter.finisherCry || 'JUICED.') : 'YOU GOT PEELED.';
       document.getElementById('end-message').textContent = victory
-        ? 'Three waves cleared. The orchard is yours.'
-        : 'The bananas got you. Run it back.';
+        ? 'Four waves cleared. The orchard is yours.'
+        : 'They got you. Run it back.';
       document.getElementById('end-rank').textContent = combo.rank === 'None' ? 'D' : combo.rank;
       document.getElementById('end-score').textContent = Math.round(combo.points);
       document.getElementById('end-finishers').textContent = state.finisherCount;
+      const hintEl = document.getElementById('end-unlock-hint');
+      if (newlyUnlocked.length > 0) {
+        hintEl.innerHTML = '<b>NEW FIGHTER UNLOCKED</b> — check the roster.';
+      } else {
+        // suggest next unlock
+        const next = nextUnlockHint();
+        hintEl.innerHTML = next ? `<span style="opacity:0.7;">Next unlock: ${next}</span>` : '';
+      }
       o.classList.remove('hidden');
-    }, 200);
+    }, 250);
+  }
+
+  function nextUnlockHint() {
+    const u = META.data.unlocks;
+    if (!u.banana)    return `🍌 Trigger 1 Fruitality (${META.data.lifetimeFinishers}/1)`;
+    if (!u.pineapple) return `🍍 Trigger ${5 - META.data.lifetimeFinishers} more Fruitalities`;
+    if (!u.kiwi)      return `🥝 Win one run`;
+    if (!u.coconut)   return `🥥 Trigger ${10 - META.data.lifetimeFinishers} more Fruitalities`;
+    if (!u.durian)    return `👑 Defeat the Durian King boss`;
+    return null;
   }
 
   // ========== MAIN LOOP ==========
@@ -1168,24 +1409,19 @@
     requestAnimationFrame(loop);
     let raw = (ts - lastTs) / 1000;
     lastTs = ts;
-    if (raw > 0.1) raw = 0.1;        // avoid huge dt after tab-switch
+    if (raw > 0.1) raw = 0.1;
     state.dtRaw = raw;
     let dt = raw;
     if (state.slowMo.remaining > 0) dt *= state.slowMo.scale;
-    if (state.hitPauseRemaining > 0) {
-      state.hitPauseRemaining = Math.max(0, state.hitPauseRemaining - raw);
-      dt = 0;
-    }
+    if (state.hitPauseRemaining > 0) { state.hitPauseRemaining = Math.max(0, state.hitPauseRemaining - raw); dt = 0; }
     state.dt = dt;
     if (state.running) update(dt);
     render();
   }
 
   function fitCanvas() {
-    // Maintain 8:5 (960x600) aspect ratio inside viewport
     const aspect = CFG.canvasW / CFG.canvasH;
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const w = window.innerWidth, h = window.innerHeight;
     let cw, ch;
     if (w / h > aspect) { ch = h; cw = h * aspect; }
     else { cw = w; ch = w / aspect; }
@@ -1194,15 +1430,25 @@
   }
   window.addEventListener('resize', fitCanvas);
 
+  // ========== PWA service worker ==========
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+
   // ========== INIT ==========
   function init() {
     bindKeyboard();
     bindTouch();
     fitCanvas();
-    document.getElementById('start-btn').addEventListener('click', () => {
+    document.getElementById('start-btn').addEventListener('click', showSelect);
+    document.getElementById('select-start').addEventListener('click', () => {
+      if (!selectedFighterId) return;
       restart();
     });
     document.getElementById('end-restart').addEventListener('click', restart);
+    document.getElementById('end-select').addEventListener('click', showSelect);
     document.getElementById('end-save').addEventListener('click', saveClip);
     document.getElementById('end-share').addEventListener('click', shareClip);
     requestAnimationFrame(ts => { lastTs = ts; requestAnimationFrame(loop); });
