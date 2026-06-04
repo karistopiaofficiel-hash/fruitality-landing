@@ -72,7 +72,7 @@ export const fruitality = {
     [{ type: 'grape', count: 3 }, { type: 'lime', count: 2 }, { type: 'coconut', count: 1 }],
   ],
   combat: {
-    knockback: 4, hitPause: 0.07, finisherThreshold: 0.18,
+    knockback: 4, hitPause: 0.07, finisherThreshold: 0.25,
     pointsHit: 6, pointsFinisher: 70,
     combo: [['D', 1], ['C', 28], ['B', 60], ['A', 110], ['S', 180], ['SS', 260], ['JUICEMASTER', 360]],
   },

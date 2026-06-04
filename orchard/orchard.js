@@ -378,7 +378,20 @@ export class Orchard {
     const m = this.models[def.model].clone(true);
     // per-instance materials (so hit-flash emissive doesn't bleed across clones)
     const tint = new THREE.Color(def.juice); rig.bodyMats = [];
-    m.traverse(n => { if (n.isMesh) { n.material = n.material.clone(); n.material.emissive = tint.clone().multiplyScalar(0.0); n.castShadow = true; n.receiveShadow = true; rig.bodyMats.push(n.material); } });
+    // Per-fruit self-illumination so each reads in ITS natural color, not uniformly dark in the
+    // moody arena. Sunny fruit (banana/lime/lemon) lift a lot; naturally dark ones (coconut) barely.
+    // `bright` (0..1) can override per fighter; otherwise derived from the fruit's own luminance.
+    const lum = 0.299 * tint.r + 0.587 * tint.g + 0.114 * tint.b;
+    const lift = def.bright ?? clamp(lum * 1.15, 0.1, 0.9);
+    rig.baseEmi = lift * 0.28;                                 // gentle self-glow in the fruit's own hue
+    m.traverse(n => {
+      if (!n.isMesh) return;
+      n.material = n.material.clone();
+      n.material.emissive = tint.clone();                      // glow/flash now actually shows (was black before)
+      n.material.emissiveIntensity = rig.baseEmi;
+      if (n.material.color) n.material.color.multiplyScalar(0.92 + lift * 0.5); // brighten albedo of sunny fruit
+      n.castShadow = true; n.receiveShadow = true; rig.bodyMats.push(n.material);
+    });
     // scale the (height-1) model to world height, feet on the ground
     const H = (isPlayer ? 3.4 : 3.4 * (def.scale ?? 0.95));
     m.scale.setScalar(H);
@@ -509,41 +522,53 @@ export class Orchard {
   _attack() {
     if (!this.state.running || this.player.dying) return;
     if (this.player.atkCd > 0) return;
-    const st = this.spec.fighters.player.stats;
-    this.player.atkCd = st.attackCd; this.player.swing = 0.22; this.player.state = 'attack';
-    this.player.atkSide = ((this.player.atkSide || 0) + 1) % 2; // alternate L/R for a combo feel
-    this.player.play('punch', 0.05); this.player.atkAnim = 1; this.audio.swing();
+    const st = this.spec.fighters.player.stats, P = this.player;
+    // combo chain: two quick jabs then a HEAVY slam (3rd hit). resets if you pause.
+    if (this.state.t - (P._lastAtk || -9) > 0.8) P.combo = 0;
+    P._lastAtk = this.state.t; P.combo = (P.combo || 0) + 1;
+    P.heavy = (P.combo % 3 === 0);
+    P.atkCd = P.heavy ? st.attackCd * 2.0 : st.attackCd;
+    P.swing = P.heavy ? 0.34 : 0.22; P.state = 'attack';
+    P.atkSide = ((P.atkSide || 0) + 1) % 2;
+    P.atkAnim = 1; P.play('punch', 0.05);
+    if (P.heavy) { this.audio.heavy(); this.audio.effort(P.voicePitch); this._shake(0.12, 0.14); this._floater('HEAVY!', P.group.position.clone().setY(4), '#ffd23c'); } else this.audio.swing();
   }
   // Procedural attack for sculpted models (no skeleton): windup back -> thrust
   // forward + chomp-pitch + stretch. Reads as a body-slam/headbutt strike.
   _attackAnim(rig, dt) {
-    rig.atkAnim -= dt / 0.24;
-    const u = clamp(1 - rig.atkAnim, 0, 1);
-    let lunge, pitch, stretch;
-    if (u < 0.28) { const w = u / 0.28; lunge = -0.28 * w; pitch = 0.22 * w; stretch = -0.09 * w; }        // windup back (anticipation)
-    else { const s = (u - 0.28) / 0.72, e = 1 - Math.pow(1 - s, 4); lunge = lerp(-0.28, 1.35, e); pitch = lerp(0.22, -0.62, e); stretch = lerp(-0.09, 0.22, e); if (s > 0.55) { const r = (s - 0.55) / 0.45; lunge *= 1 - r * 0.88; pitch *= 1 - r; stretch *= 1 - r; } } // snap forward + recover
-    const side = rig.atkSide ? 1 : -1;      // alternating hook direction
-    rig.head.position.z = lunge * 0.8;      // thrust along facing (group is yawed to face)
-    rig.head.position.x = side * Math.max(0, lunge) * 0.35; // diagonal hook step
-    rig.head.position.y = (rig._footY || 0) + Math.max(0, lunge) * 0.18; // slight rise on the slam
-    rig.head.rotation.x = pitch;            // chomp/headbutt pitch
-    rig.head.rotation.z = side * Math.max(0, stretch) * 0.7; // roll into the hook
-    rig.head.rotation.y = side * Math.max(0, lunge) * 0.3;   // twist into the swing
-    const b = rig.bodyBaseScale; rig.head.scale.set(b.x * (1 - stretch * 0.45), b.y * (1 - stretch * 0.45), b.z * (1 + stretch));
-    if (rig.atkAnim <= 0) { rig.atkAnim = 0; rig.head.position.set(0, rig._footY || 0, 0); rig.head.rotation.set(0, 0, 0); }
+    const heavy = rig.heavy;
+    rig.atkAnim -= dt / (heavy ? 0.34 : 0.22);
+    const u = clamp(1 - rig.atkAnim, 0, 1), peak = heavy ? 0.42 : 0.34;
+    // jab/slam profile: fast OUT toward target then ease back. NO windup-back, NO bend-over.
+    let p; if (u < peak) p = 1 - Math.pow(1 - u / peak, 2); else p = Math.max(0, 1 - (u - peak) / (1 - peak));
+    const big = heavy ? 1.6 : 1, side = rig.atkSide ? 1 : -1, b = rig.bodyBaseScale;
+    rig.head.position.z = p * 0.95 * big;                                  // forward jab/lunge toward target
+    rig.head.position.x = side * p * 0.3 * (heavy ? 0.4 : 1);              // alternating hook (quick only)
+    rig.head.position.y = (rig._footY || 0) + p * 0.28 + (heavy ? Math.sin(clamp(u, 0, 1) * Math.PI) * 0.4 : 0); // heavy lifts then slams down
+    rig.head.rotation.x = p * (heavy ? 0.15 : 0.10);                       // small forward dip only
+    rig.head.rotation.z = side * p * 0.2 * (heavy ? 0.4 : 1);
+    rig.head.scale.set(b.x * (1 - p * 0.16 * big), b.y * (1 - p * 0.14), b.z * (1 + p * 0.3 * big));
+    if (rig.atkAnim <= 0) { rig.atkAnim = 0; rig.heavy = false; rig.head.position.set(0, rig._footY || 0, 0); rig.head.rotation.set(0, 0, 0); }
   }
   _resolveSwing() {
     if (this.player._swingDone) return; this.player._swingDone = true;
     const st = this.spec.fighters.player.stats, P = this.player.group.position, F = this.player.facing;
+    const heavy = !!this.player.heavy;
+    const reach = heavy ? st.reach * 1.45 : st.reach;        // heavy slam sweeps wider
+    const arc = heavy ? -0.15 : 0.25;                        // heavy = near half-circle; quick = tight cone
+    const dmg = heavy ? Math.round(st.damage * 2.3) : st.damage;
+    const knock = heavy ? (this.spec.combat.knockback ?? 4) * 2.4 : null;
+    let any = false;
     for (const e of this.state.enemies) {
       if (e.dying) continue;
-      const d = e.group.position.clone().sub(P); const dist = d.length(); if (dist > st.reach) continue;
-      d.normalize(); if (d.dot(F) < 0.25) continue;
-      this._hurt(e, st.damage, d);
+      const d = e.group.position.clone().sub(P); const dist = d.length(); if (dist > reach) continue;
+      d.normalize(); if (d.dot(F) < arc) continue;
+      this._hurt(e, dmg, d, knock); any = true;
     }
+    if (heavy && any) { this.state.hitPause = 0.13; this._shake(0.28, 0.32); }  // weighty slam impact
   }
-  _hurt(e, dmg, dir) {
-    e.hp -= dmg; e.flash = 0.18; e.vel.add(dir.clone().multiplyScalar(this.spec.combat.knockback ?? 4));
+  _hurt(e, dmg, dir, knock) {
+    e.hp -= dmg; e.flash = 0.18; e.vel.add(dir.clone().multiplyScalar(knock ?? this.spec.combat.knockback ?? 4));
     e.wobV = (e.wobV || 0) + 0.8; // jelly-jiggle on hit
     const o = e.group.position.clone().setY(1.4);
     this.juice(o, e.def.juice, 16, 7.5);
@@ -812,10 +837,19 @@ export class Orchard {
     if (P.mixer) P.mixer.update(dt);
 
     // enemies
+    // finisher discoverability: pulse-glow any enemy weak enough to EXECUTE + flag for the HUD prompt
+    const _ramp = this.state.rageT > 0, _wpn = !!this.state.weapon;
+    const finThr = _ramp ? 0.45 : (_wpn ? 0.3 : (this.spec.combat.finisherThreshold ?? 0.25));
+    const finRange = st.reach * 1.8;
+    let anyFin = false;
     for (const e of this.state.enemies) {
       e.flash = Math.max(0, e.flash - dt);
-      if (e.bodyMats) e.bodyMats.forEach(mt => mt.emissiveIntensity = e.flash * 3);
-      else if (e.head && e.head.material) e.head.material.emissiveIntensity = e.flash * 3;
+      let emi = Math.max(e.flash * 3, e.baseEmi || 0);          // keep the fruit's natural self-glow between hits
+      const fin = !e.dying && !(e.thrown > 0) && e !== this.state.grabbed && (e.hp / e.maxHp <= finThr) && e.group.position.distanceTo(P.group.position) <= finRange;
+      e.finishable = fin;
+      if (fin) { emi = Math.max(emi, 1.05 + Math.sin(this.state.t * 10) * 0.75); anyFin = true; } // throbbing "execute me" glow
+      if (e.bodyMats) e.bodyMats.forEach(mt => mt.emissiveIntensity = emi);
+      else if (e.head && e.head.material) e.head.material.emissiveIntensity = emi;
       if (e.thrown > 0) { this._updateThrown(e, dt); if (e.mixer) e.mixer.update(dt); continue; }
       if (e === this.state.grabbed) { this._updateHeld(e, dt); if (e.mixer) e.mixer.update(dt); continue; }
       if (e.dying) { e.dying -= dt; if (e.mixer) e.mixer.update(dt); else this._toppleModel(e, dt); continue; }
@@ -827,6 +861,16 @@ export class Orchard {
       const v = e.vel.length(); if (v > def.speed) e.vel.multiplyScalar(def.speed / v);
       e.group.position.add(e.vel.clone().multiplyScalar(dt));
       const flat = e.group.position.clone(); flat.y = 0; if (flat.length() > this.arenaR - 1.5) { flat.setLength(this.arenaR - 1.5); e.group.position.x = flat.x; e.group.position.z = flat.z; }
+      // SEPARATION: don't clip into the player, don't stack on other enemies
+      const sP = e.group.position.clone().sub(P.group.position); sP.y = 0; const dP = sP.length();
+      const standoff = 1.4 + (def.reach * 0.5);
+      if (dP < standoff && dP > 0.01) { e.group.position.addScaledVector(sP.normalize(), (standoff - dP) * Math.min(1, dt * 12)); }
+      for (const o of this.state.enemies) {
+        if (o === e || o.dying || o.thrown > 0 || o === this.state.grabbed) continue;
+        const s = e.group.position.clone().sub(o.group.position); s.y = 0; const d = s.length();
+        const want = 1.1 + (e.def.scale ?? 1) + (o.def.scale ?? 1);
+        if (d < want && d > 0.01) e.group.position.addScaledVector(s.normalize(), (want - d) * Math.min(1, dt * 8));
+      }
       e.group.lookAt(P.group.position.x, 0.5, P.group.position.z);
       if (e.isModel && (e.atkAnim || 0) > 0) this._attackAnim(e, dt);
       else this._applyGait(e, dt, clamp(e.vel.length() / def.speed, 0, 1.2));
@@ -834,6 +878,9 @@ export class Orchard {
       if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); e.atkAnim = 1; e.atkSide = ((e.atkSide || 0) + 1) % 2; setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
       if (e.mixer) e.mixer.update(dt);
     }
+    // FINISH prompt: fire once when an enemy first becomes executable (and clear when none are)
+    if (anyFin && !this.state._finReady) { this.state._finReady = true; this.emit('banner', 'FINISH READY', 'press F / tap 🔪'); this.audio.chirp(1.3); }
+    else if (!anyFin) this.state._finReady = false;
     // remove finished-dying enemies
     for (const e of this.state.enemies) if (e.dying < 0) this.scene.remove(e.group);
     this.state.enemies = this.state.enemies.filter(e => !(e.dying < 0));
@@ -855,7 +902,7 @@ export class Orchard {
       const mats = this.player.bodyMats || (this.player.head && this.player.head.material ? [this.player.head.material] : []);
       const gl = 0.35 + 0.28 * Math.sin(this.state.t * 14);
       mats.forEach(m => { if (m.emissive) { m.emissive.setHex(0xff2a2a); m.emissiveIntensity = gl; } });
-      if (this.state.rageT <= 0) { mats.forEach(m => { if (m.emissive) m.emissiveIntensity = 0; }); this.emit('rage', 0, 0); }
+      if (this.state.rageT <= 0) { const be = this.player.baseEmi || 0; mats.forEach(m => { if (m.emissive) { m.emissive.setHex(this.player.def.juice); m.emissiveIntensity = be; } }); this.emit('rage', 0, 0); }
       else if (Math.random() < 0.2) this.emit('rage', this.state.rage, Math.max(0, this.state.rageT));
     }
     // juice fountains (sustained emitters)
@@ -933,9 +980,12 @@ export class Orchard {
       if (this.cam.t <= 0) { this.cam.fin = false; this.emit('cinematic', false); }
     } else {
       const f = this.player.facing;
-      const want = new THREE.Vector3(P.x - f.x * 12, P.y + 9, P.z - f.z * 12);
+      // lower, closer, slightly side-kicked cam → attacks read as forward jabs (not top-down "backshot"),
+      // and the framing is more heroic/cinematic. look-target raised so we look UP at the action.
+      const side = 0.16; // small lateral offset for a 3/4 angle instead of dead-behind
+      const want = new THREE.Vector3(P.x - f.x * 11.5 + f.z * side * 11.5, P.y + 6.2, P.z - f.z * 11.5 - f.x * side * 11.5);
       this.camera.position.lerp(want, 1 - Math.pow(0.003, dt));
-      const look = new THREE.Vector3(P.x, P.y + 1.2, P.z);
+      const look = new THREE.Vector3(P.x + f.x * 1.5, P.y + 1.7, P.z + f.z * 1.5);
       if (this.state.shake.t > 0) { const i = this.state.shake.t / 0.5; look.x += rand(-1, 1) * this.state.shake.mag * i * 4; look.y += rand(-1, 1) * this.state.shake.mag * i * 2; }
       this.camera.lookAt(look);
     }
