@@ -244,14 +244,43 @@ export class Orchard {
     // tint body + add fruit head
     const tint = new THREE.Color(def.juice);
     rig.group.traverse(n => { if (n.isMesh) { n.material = n.material.clone(); if (n.material.color) n.material.color.copy(tint); if ('emissive' in n.material) n.material.emissive = tint.clone().multiplyScalar(.15); n.material.roughness = .5; n.userData.base = n.material.color ? n.material.color.clone() : null; } });
-    // fruit head ornament — lit by the scene, NOT emissive (emissive blooms out the frame)
-    const hr = 0.3;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(hr, 24, 24), new THREE.MeshStandardMaterial({ color: tint, roughness: .45, metalness: 0.0, emissive: tint.clone(), emissiveIntensity: 0 }));
-    head.position.set(0, 1.98, 0); head.scale.set(1, isPlayer ? .95 : 1.1, 1); head.castShadow = true; rig.group.add(head); rig.head = head;
-    if (def.stripes) { for (let i = 0; i < 7; i++) { const st = new THREE.Mesh(new THREE.TorusGeometry(hr, 0.03, 8, 28, Math.PI), new THREE.MeshStandardMaterial({ color: def.stripeColor ?? 0x0c4f1c, roughness: .5 })); st.rotation.y = (i / 7) * Math.PI * 2; st.rotation.x = Math.PI / 2; head.add(st); } }
-    // little leaf so it reads as fruit
-    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 6), new THREE.MeshStandardMaterial({ color: 0x3a8f2a, roughness: .6 }));
-    leaf.position.set(0, hr + 0.1, 0); head.add(leaf);
+    // --- FRUIT-WARRIOR BODY: the fruit IS the torso. Hide the robot chest+head
+    //     shells, keep the (tinted) arms/legs/hands so limbs still animate, and
+    //     bolt a big fruit body onto the torso bone so it moves with the rig. ---
+    const bones = {}; rig.group.traverse(n => { if (n.isBone) bones[n.name] = n; });
+    rig.group.traverse(n => { if (n.isMesh && /^(Torso_|Head_)/.test(n.name)) n.visible = false; });
+    const torsoBone = bones['Torso_1'] || bones['Abdomen'] || bones['Body'];
+    // bones carry a 100x local scale; child local scale = worldRadius / 100
+    const bodyR = def.bodyR ?? (isPlayer ? 0.82 : 0.9);
+    const s = bodyR / 100;
+    const fruitMat = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.4, metalness: 0.0, emissive: tint.clone(), emissiveIntensity: 0 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 28), fruitMat);
+    body.scale.set(s, s * 1.12, s); body.castShadow = true; body.receiveShadow = true;
+    torsoBone.add(body); rig.head = body; // (hit-flash + head-pop reuse rig.head)
+    // watermelon-style rind stripes (meridians)
+    if (def.stripes) {
+      for (let i = 0; i < 7; i++) {
+        const st = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.045, 8, 40, Math.PI), new THREE.MeshStandardMaterial({ color: def.stripeColor ?? 0x0c4f1c, roughness: .5 }));
+        st.rotation.y = (i / 7) * Math.PI * 2; st.rotation.x = Math.PI / 2; body.add(st);
+      }
+    }
+    // face — eyes + brows on the +Z front of the body (tuned visually)
+    const eyeW = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .25 });
+    const pupM = new THREE.MeshBasicMaterial({ color: 0x140e14 });
+    const browM = new THREE.MeshStandardMaterial({ color: 0x140e14, roughness: .6 });
+    for (const sx of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 18), eyeW);
+      eye.position.set(sx * 0.34, 0.14, 0.9); body.add(eye);
+      const pp = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), pupM);
+      pp.position.set(sx * 0.36, 0.11, 1.04); body.add(pp);
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.07), browM);
+      brow.position.set(sx * 0.34, 0.42, 0.93); brow.rotation.z = sx * 0.5; body.add(brow); // angry V
+    }
+    // stem + leaf crown
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.32, 6), new THREE.MeshStandardMaterial({ color: 0x4a7a32, roughness: .7 }));
+    stem.position.set(0, 1.0, 0); body.add(stem);
+    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 6), new THREE.MeshStandardMaterial({ color: 0x3a8f2a, roughness: .6 }));
+    leaf.position.set(0.16, 1.05, 0); leaf.rotation.z = -0.6; body.add(leaf);
     // animation
     rig.mixer = new THREE.AnimationMixer(rig.group);
     rig.actions = {}; const clips = this.gltf.animations || [];
