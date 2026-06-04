@@ -57,6 +57,7 @@ export class Orchard {
     this._lastTs = performance.now();
     requestAnimationFrame((ts) => { this._lastTs = ts; this._loop(ts); });
     this.state.running = true;
+    this.audio.startMusic();
     this._nextWave();
     this.emit('ready');
   }
@@ -399,7 +400,7 @@ export class Orchard {
     if (!target) return;
     this._addCombo(this.spec.combat.pointsFinisher ?? 70);
     this.state.hitPause = 0.5; this.state.slowmo = 0.95; this.state.flash = 0.4; this._shake(0.26, 0.55);
-    this.audio.finisher();
+    this.audio.finisher(); this.audio.duck(700);
     this._camFinisher(target.group.position.clone());
     const dir = P.clone().sub(target.group.position).setY(0).normalize();
     this._kill(target, dir, true);
@@ -427,6 +428,7 @@ export class Orchard {
   _end(won) {
     if (this.state.finished) return;
     this.state.finished = true; this.state.running = false; this.state.won = won;
+    this.audio.stopMusic();
     setTimeout(() => this.emit('end', { won, rank: this.state.combo.rank, score: Math.round(this.state.combo.points), finishers: this.state.finishers }), 400);
   }
 
@@ -576,12 +578,65 @@ export class Orchard {
 
 // ---------------------------------------------------------------- tiny web-audio sfx
 class SfxKit {
-  constructor() { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); this.ok = true; } catch (e) { this.ok = false; } }
-  blip(f, d, type, g, sweep = 0) { if (!this.ok) return; const t = this.ctx.currentTime, o = this.ctx.createOscillator(), gn = this.ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); if (sweep) o.frequency.exponentialRampToValueAtTime(Math.max(40, f + sweep), t + d); gn.gain.setValueAtTime(g, t); gn.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(gn).connect(this.ctx.destination); o.start(t); o.stop(t + d + .02); }
-  hit() { this.blip(220, .06, 'square', .18, -180); this.blip(1200, .04, 'triangle', .1, -1000); }
-  heavy() { this.blip(140, .12, 'sawtooth', .22, -90); }
-  swing() { this.blip(600, .05, 'sawtooth', .08, -400); }
-  hurt() { this.blip(110, .18, 'triangle', .2, -40); }
-  finisher() { this.blip(80, .5, 'sawtooth', .3, -60); setTimeout(() => this.blip(60, .7, 'sine', .22, 200), 100); }
-  wave() { this.blip(660, .2, 'sine', .18, 200); }
+  constructor() {
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // master bus: soft limiter so layered hits + music never clip
+      this.comp = this.ctx.createDynamicsCompressor();
+      this.comp.threshold.value = -10; this.comp.knee.value = 24; this.comp.ratio.value = 12; this.comp.attack.value = 0.003; this.comp.release.value = 0.25;
+      this.master = this.ctx.createGain(); this.master.gain.value = 0.9;
+      this.sfx = this.ctx.createGain(); this.sfx.gain.value = 0.85;
+      this.music = this.ctx.createGain(); this.music.gain.value = 0.0; // fades in on start
+      this.sfx.connect(this.master); this.music.connect(this.master); this.master.connect(this.comp); this.comp.connect(this.ctx.destination);
+      // shared noise buffer for impacts/percussion
+      const n = this.ctx.sampleRate * 1.0; this.noiseBuf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      this.ok = true;
+    } catch (e) { this.ok = false; }
+  }
+  _resume() { if (this.ok && this.ctx.state === 'suspended') this.ctx.resume(); }
+  // tonal voice
+  blip(f, d, type, g, sweep = 0, bus = this.sfx) { if (!this.ok) return; const t = this.ctx.currentTime, o = this.ctx.createOscillator(), gn = this.ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); if (sweep) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + sweep), t + d); gn.gain.setValueAtTime(g, t); gn.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(gn).connect(bus); o.start(t); o.stop(t + d + .02); }
+  // filtered noise burst (impacts, hats, splats)
+  noise(d, g, lp = 4000, hp = 0, when = 0) { if (!this.ok) return; const t = this.ctx.currentTime + when; const s = this.ctx.createBufferSource(); s.buffer = this.noiseBuf; const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; const gn = this.ctx.createGain(); gn.gain.setValueAtTime(g, t); gn.gain.exponentialRampToValueAtTime(.0001, t + d); let node = s.connect(f); if (hp) { const h = this.ctx.createBiquadFilter(); h.type = 'highpass'; h.frequency.value = hp; f.connect(h); node = h; } else node = f; node.connect(gn).connect(this.sfx); s.start(t); s.stop(t + d + .02); }
+  // --- combat sfx (punchier: noise body + tonal snap) ---
+  hit() { this.noise(0.07, 0.5, 2600, 400); this.blip(240, .05, 'square', .12, -160); this.blip(1500, .03, 'triangle', .07, -1200); }
+  heavy() { this.noise(0.16, 0.7, 1500); this.blip(120, .16, 'sawtooth', .22, -70); this.blip(60, .2, 'sine', .18, -20); }
+  swing() { this.noise(0.05, 0.18, 6000, 1500); }
+  hurt() { this.blip(120, .18, 'triangle', .18, -50); this.noise(0.1, 0.25, 1200); }
+  finisher() { this.blip(90, .5, 'sawtooth', .28, -60); this.blip(70, .7, 'sine', .2, 240); this.noise(0.5, 0.5, 3000); setTimeout(() => { this.blip(330, .25, 'square', .12, 200); this.blip(440, .3, 'square', .1, 260); }, 90); }
+  wave() { this.blip(330, .18, 'sine', .14, 180); this.blip(660, .22, 'triangle', .1, 220); }
+  // --- procedural music: driving four-on-the-floor loop, lookahead scheduler ---
+  startMusic() {
+    if (!this.ok || this._mTimer) return; this._resume();
+    this.music.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+    this.music.gain.exponentialRampToValueAtTime(0.22, this.ctx.currentTime + 2.5);
+    const bpm = 134, step16 = 60 / bpm / 4;
+    this._step = 0; this._nextT = this.ctx.currentTime + 0.1;
+    // A-minor-ish driving riff (bass MIDI -> Hz)
+    const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    const bass = [33, 33, 33, 45, 40, 40, 28, 28, 33, 33, 36, 33, 31, 31, 43, 43]; // per 16th
+    const arp = [69, null, 72, null, 76, null, 72, null, 67, null, 71, null, 74, null, 79, null];
+    const schedStep = (s, t) => {
+      // kick (four on the floor)
+      if (s % 4 === 0) { const o = this.ctx.createOscillator(), g = this.ctx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.12); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(.001, t + 0.16); o.connect(g).connect(this.music); o.start(t); o.stop(t + 0.18); }
+      // clap/snare on 2 & 4
+      if (s === 4 || s === 12) { const sN = this.ctx.createBufferSource(); sN.buffer = this.noiseBuf; const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; const g = this.ctx.createGain(); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(.001, t + 0.13); sN.connect(f).connect(g).connect(this.music); sN.start(t); sN.stop(t + 0.15); }
+      // hat on offbeats
+      if (s % 2 === 1) { const sN = this.ctx.createBufferSource(); sN.buffer = this.noiseBuf; const f = this.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000; const g = this.ctx.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(.001, t + 0.05); sN.connect(f).connect(g).connect(this.music); sN.start(t); sN.stop(t + 0.06); }
+      // bass
+      { const o = this.ctx.createOscillator(), g = this.ctx.createGain(), lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; o.type = 'sawtooth'; o.frequency.value = hz(bass[s]); g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.32, t + 0.01); g.gain.exponentialRampToValueAtTime(.001, t + step16 * 0.9); o.connect(lp).connect(g).connect(this.music); o.start(t); o.stop(t + step16); }
+      // arp lead (quieter)
+      if (arp[s] != null) { const o = this.ctx.createOscillator(), g = this.ctx.createGain(); o.type = 'square'; o.frequency.value = hz(arp[s]); g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.09, t + 0.005); g.gain.exponentialRampToValueAtTime(.001, t + 0.18); o.connect(g).connect(this.music); o.start(t); o.stop(t + 0.2); }
+    };
+    this._mTimer = setInterval(() => {
+      if (!this.ok) return;
+      while (this._nextT < this.ctx.currentTime + 0.12) {
+        schedStep(this._step % 16, this._nextT);
+        this._nextT += step16; this._step++;
+      }
+    }, 25);
+  }
+  stopMusic() { if (this._mTimer) { clearInterval(this._mTimer); this._mTimer = null; if (this.ok) { this.music.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.8); } } }
+  duck(ms = 400) { if (!this.ok) return; const t = this.ctx.currentTime; this.music.gain.cancelScheduledValues(t); const cur = this.music.gain.value || 0.22; this.music.gain.setValueAtTime(cur, t); this.music.gain.linearRampToValueAtTime(cur * 0.35, t + 0.04); this.music.gain.linearRampToValueAtTime(cur, t + ms / 1000); }
 }
