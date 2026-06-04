@@ -189,9 +189,9 @@ export class Orchard {
     const tint = new THREE.Color(def.juice);
     rig.group.traverse(n => { if (n.isMesh) { n.material = n.material.clone(); if (n.material.color) n.material.color.copy(tint); if ('emissive' in n.material) n.material.emissive = tint.clone().multiplyScalar(.15); n.material.roughness = .5; n.userData.base = n.material.color ? n.material.color.clone() : null; } });
     // fruit head ornament — lit by the scene, NOT emissive (emissive blooms out the frame)
-    const hr = 0.4;
+    const hr = 0.3;
     const head = new THREE.Mesh(new THREE.SphereGeometry(hr, 24, 24), new THREE.MeshStandardMaterial({ color: tint, roughness: .45, metalness: 0.0, emissive: tint.clone(), emissiveIntensity: 0 }));
-    head.position.set(0, 2.05, 0); head.scale.set(1, isPlayer ? .92 : 1.12, 1); head.castShadow = true; rig.group.add(head); rig.head = head;
+    head.position.set(0, 1.98, 0); head.scale.set(1, isPlayer ? .95 : 1.1, 1); head.castShadow = true; rig.group.add(head); rig.head = head;
     if (def.stripes) { for (let i = 0; i < 7; i++) { const st = new THREE.Mesh(new THREE.TorusGeometry(hr, 0.03, 8, 28, Math.PI), new THREE.MeshStandardMaterial({ color: def.stripeColor ?? 0x0c4f1c, roughness: .5 })); st.rotation.y = (i / 7) * Math.PI * 2; st.rotation.x = Math.PI / 2; head.add(st); } }
     // little leaf so it reads as fruit
     const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 6), new THREE.MeshStandardMaterial({ color: 0x3a8f2a, roughness: .6 }));
@@ -433,9 +433,9 @@ export class Orchard {
       if (this.cam.t <= 0) this.cam.fin = false;
     } else {
       const f = this.player.facing;
-      const want = new THREE.Vector3(P.x - f.x * 8.5, P.y + 10, P.z - f.z * 8.5);
+      const want = new THREE.Vector3(P.x - f.x * 12, P.y + 9, P.z - f.z * 12);
       this.camera.position.lerp(want, 1 - Math.pow(0.003, dt));
-      const look = new THREE.Vector3(P.x, P.y + 1.0, P.z);
+      const look = new THREE.Vector3(P.x, P.y + 1.2, P.z);
       if (this.state.shake.t > 0) { const i = this.state.shake.t / 0.5; look.x += rand(-1, 1) * this.state.shake.mag * i * 4; look.y += rand(-1, 1) * this.state.shake.mag * i * 2; }
       this.camera.lookAt(look);
     }
