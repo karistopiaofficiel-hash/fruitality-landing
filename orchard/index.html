@@ -74,6 +74,7 @@
   #fin{position:absolute;right:1.6rem;bottom:150px;width:78px;height:78px;border-radius:50%;background:rgba(225,60,90,.7);border:3px solid rgba(255,255,255,.7);color:#fff;font-size:.95rem;font-weight:900;pointer-events:auto;opacity:.5;}
   #dash{position:absolute;right:124px;bottom:1.6rem;width:72px;height:72px;border-radius:50%;background:rgba(123,199,77,.55);border:3px solid rgba(255,255,255,.6);color:#fff;font-size:1.5rem;font-weight:900;pointer-events:auto;}
   #ramp{position:absolute;right:1.6rem;bottom:240px;width:74px;height:74px;border-radius:50%;background:rgba(255,60,60,.6);border:3px solid rgba(255,180,120,.85);color:#fff;font-size:1.7rem;font-weight:900;pointer-events:auto;box-shadow:0 0 16px rgba(255,80,40,.5);}
+  #grab{position:absolute;right:210px;bottom:1.6rem;width:72px;height:72px;border-radius:50%;background:rgba(160,110,220,.55);border:3px solid rgba(255,255,255,.6);color:#fff;font-size:1.5rem;font-weight:900;pointer-events:auto;}
   a.back{position:fixed;top:.7rem;right:.7rem;z-index:13;color:var(--dim);text-decoration:none;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:.4rem .7rem;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.12);border-radius:8px;}
 </style>
 <script type="importmap">
@@ -105,6 +106,7 @@
   <button id="fin">FRUI</button>
   <button id="dash">»</button>
   <button id="ramp">⚡</button>
+  <button id="grab">✊</button>
 </div>
 <div id="start" class="overlay hidden">
   <span class="badge">Orchard engine · web 3D</span>
@@ -112,7 +114,7 @@
   <p>Rigged fruit warriors, juicy melee, cinematic finishers — running in your browser. Built on the Orchard web-game engine.</p>
   <div class="pick">Choose your fighter</div>
   <div class="roster" id="roster"></div>
-  <div class="controls"><kbd>WASD</kbd><span>Move</span><kbd>Space / Click</kbd><span>Attack</span><kbd>Shift</kbd><span>Dash (dodge i-frames)</span><kbd>F</kbd><span>Finisher / RIP</span><kbd>Q</kbd><span>RAMPAGE — rip them in two</span><kbd>R</kbd><span>Restart</span></div>
+  <div class="controls"><kbd>WASD</kbd><span>Move</span><kbd>Space / Click</kbd><span>Attack</span><kbd>Shift</kbd><span>Dash (dodge i-frames)</span><kbd>F</kbd><span>Finisher / RIP</span><kbd>Q</kbd><span>RAMPAGE — rip them in two</span><kbd>E</kbd><span>Grab weak fruit → drag/bludgeon → E throws</span><kbd>R</kbd><span>Restart</span></div>
 </div>
 <div id="end" class="overlay hidden">
   <span class="badge">Run complete</span>
@@ -207,6 +209,7 @@ $('again').onclick = () => location.reload();
   $('fin').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnFinisher(); }, { passive: false });
   $('dash').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnDash(); }, { passive: false });
   $('ramp').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnRampage(); }, { passive: false });
+  $('grab').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnGrab(); }, { passive: false });
 })();
 boot();
 </script>

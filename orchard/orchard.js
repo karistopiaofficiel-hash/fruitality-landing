@@ -37,6 +37,7 @@ export class Orchard {
       finishers: 0,
       rage: 0, rageT: 0,        // RAMPAGE meter (0..1) + active timer (s)
       weapon: null,             // grabbed cutting weapon { type, tier, t }
+      grabbed: null,            // a low-HP enemy currently grabbed/dragged
     };
     this.keys = new Set();
     this.touch = { x: 0, y: 0 };
@@ -468,7 +469,7 @@ export class Orchard {
 
   // ---------------------------------------------------------------- input
   _initInput() {
-    addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'f', 'r'].includes(k)) e.preventDefault(); this.keys.add(k); if (k === ' ') this._attack(); if (k === 'f') this._finisher(); if (k === 'shift') this._dash(); if (k === 'q') this._rampage(); if (k === 'r') this.emit('restart'); });
+    addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'f', 'r'].includes(k)) e.preventDefault(); this.keys.add(k); if (k === ' ') this._attack(); if (k === 'f') this._finisher(); if (k === 'shift') this._dash(); if (k === 'q') this._rampage(); if (k === 'e') this._grabEnemy(); if (k === 'r') this.emit('restart'); });
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     addEventListener('mousedown', () => { if (this.state.running) this._attack(); });
     // touch buttons wired by html via game.btnAttack()/btnFinisher()/setStick()
@@ -658,6 +659,71 @@ export class Orchard {
     if (this.player.hp <= 0) { this.player.dying = 99; this.player.play('death'); this._end(false); }
   }
 
+  // ---- GRAB a low-HP fruit, DRAG it (juice trail), bludgeon others with its body, THROW it ----
+  btnGrab() { this._grabEnemy(); }
+  _grabEnemy() {
+    if (!this.state.running || this.player.dying) return;
+    if (this.state.grabbed) { this._throwHeld(); return; } // E again = hurl it
+    const P = this.player.group.position, st = this.spec.fighters.player.stats;
+    let best = Infinity, target = null;
+    for (const e of this.state.enemies) {
+      if (e.dying || e.thrown > 0) continue;
+      if (e.hp / e.maxHp > 0.4) continue; // only a weakened fruit can be grabbed
+      const d = e.group.position.distanceTo(P); if (d < st.reach * 1.8 && d < best) { best = d; target = e; }
+    }
+    if (!target) return;
+    this.state.grabbed = target; target.vel.set(0, 0, 0); target.atkCd = 999; target._ramCd = 0;
+    this.audio.swing(); this.audio.squeak(target.voicePitch);
+    this._floater('GRABBED', target.group.position.clone().setY(3), '#fff');
+    this.emit('banner', 'GRABBED', 'drag & bludgeon · E to throw');
+  }
+  _updateHeld(e, dt) {
+    const P = this.player, f = P.facing;
+    const tgt = new THREE.Vector3(P.group.position.x - f.x * 2.3, 0.45, P.group.position.z - f.z * 2.3);
+    e.group.position.lerp(tgt, 1 - Math.pow(0.0006, dt)); // lag = drag trail
+    e.group.lookAt(P.group.position.x, 0.45, P.group.position.z); e.group.rotateX(-0.7); // dragged-on-its-back tilt
+    // bleed out + juice trail
+    e.hp -= e.maxHp * 0.11 * dt;
+    if (Math.random() < 0.7) this.juice(e.group.position.clone().setY(0.5), e.def.juice, 2, 1.4, 0.5, 0.42, 7);
+    if (Math.random() < 0.22) this._puddle(e.group.position.clone(), e.def.juice, 0.7);
+    // BLUDGEON: the dragged body damages other enemies it's pulled into
+    e._ramCd -= dt;
+    if (e._ramCd <= 0) {
+      for (const o of this.state.enemies) {
+        if (o === e || o.dying || o.thrown > 0 || o === this.state.grabbed) continue;
+        if (o.group.position.distanceTo(e.group.position) < 2.0) {
+          const dir = o.group.position.clone().sub(e.group.position).setY(0).normalize();
+          this._hurt(o, 14, dir); e.hp -= e.maxHp * 0.07; e._ramCd = 0.28; this.audio.heavy(); this._shake(0.13, 0.12);
+          this._addRage(0.04); break;
+        }
+      }
+    }
+    if (e.bodyMats) e.bodyMats.forEach(m => m.emissiveIntensity = 0.2 + 0.2 * Math.sin(this.state.t * 10));
+    else if (e.head && e.head.material) e.head.material.emissiveIntensity = 0.2 + 0.2 * Math.sin(this.state.t * 10);
+    if (e.hp <= 0) { this.state.grabbed = null; this._kill(e, f.clone(), false); } // bled out -> bursts
+  }
+  _throwHeld() {
+    const e = this.state.grabbed; if (!e) return;
+    this.state.grabbed = null;
+    const f = this.player.facing.clone(); e.thrown = 0.9; e.vel = f.multiplyScalar(24); e.vel.y = 6.5; e.atkCd = 999;
+    this.audio.swing(); this.audio.heavy(); this._shake(0.18, 0.2);
+    this._floater('THROW!', e.group.position.clone().setY(3), '#ffce4d');
+  }
+  _updateThrown(e, dt) {
+    e.thrown -= dt; e.vel.y -= 24 * dt; e.group.position.addScaledVector(e.vel, dt); e.group.rotateX(dt * 9);
+    if (Math.random() < 0.5) this.juice(e.group.position.clone(), e.def.juice, 2, 2, 0.45, 0.4, 6);
+    let hit = e.group.position.y <= 0.45 || e.thrown <= 0;
+    for (const o of this.state.enemies) {
+      if (o === e || o.dying || o.thrown > 0) continue;
+      if (o.group.position.distanceTo(e.group.position) < 2.2) { this._hurt(o, 24, e.vel.clone().setY(0).normalize()); hit = true; }
+    }
+    if (hit) {
+      e.thrown = 0; const d = e.vel.clone().setY(0).normalize();
+      this._fountain(e.group.position.clone().setY(1), e.def.juice, 0.8, 6); this._shake(0.28, 0.32);
+      this._kill(e, d.lengthSq() ? d : new THREE.Vector3(0, 0, 1), false);
+    }
+  }
+
   _addCombo(p) { const c = this.state.combo; c.points += p; c.last = this.state.t; this._refreshRank(); }
   _refreshRank() {
     const c = this.state.combo, th = this.spec.combat.combo;
@@ -730,6 +796,8 @@ export class Orchard {
       e.flash = Math.max(0, e.flash - dt);
       if (e.bodyMats) e.bodyMats.forEach(mt => mt.emissiveIntensity = e.flash * 3);
       else if (e.head && e.head.material) e.head.material.emissiveIntensity = e.flash * 3;
+      if (e.thrown > 0) { this._updateThrown(e, dt); if (e.mixer) e.mixer.update(dt); continue; }
+      if (e === this.state.grabbed) { this._updateHeld(e, dt); if (e.mixer) e.mixer.update(dt); continue; }
       if (e.dying) { e.dying -= dt; if (e.mixer) e.mixer.update(dt); else this._toppleModel(e, dt); continue; }
       e.vel.multiplyScalar(Math.pow(0.001, dt));
       const to = P.group.position.clone().sub(e.group.position); to.y = 0; const dist = to.length();
