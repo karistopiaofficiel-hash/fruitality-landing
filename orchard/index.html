@@ -42,6 +42,7 @@
   #nub{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(225,60,90,.55);border:2px solid rgba(255,255,255,.5);}
   #atk{position:absolute;right:1.4rem;bottom:1.4rem;width:94px;height:94px;border-radius:50%;background:rgba(249,212,58,.6);border:3px solid rgba(255,255,255,.7);color:#fff;font-size:1.5rem;font-weight:900;pointer-events:auto;}
   #fin{position:absolute;right:1.6rem;bottom:150px;width:78px;height:78px;border-radius:50%;background:rgba(225,60,90,.7);border:3px solid rgba(255,255,255,.7);color:#fff;font-size:.95rem;font-weight:900;pointer-events:auto;opacity:.5;}
+  #dash{position:absolute;right:124px;bottom:1.6rem;width:72px;height:72px;border-radius:50%;background:rgba(123,199,77,.55);border:3px solid rgba(255,255,255,.6);color:#fff;font-size:1.5rem;font-weight:900;pointer-events:auto;}
   a.back{position:fixed;top:.7rem;right:.7rem;z-index:13;color:var(--dim);text-decoration:none;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:.4rem .7rem;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.12);border-radius:8px;}
 </style>
 <script type="importmap">
@@ -66,12 +67,13 @@
   <div id="stick"><div id="nub"></div></div>
   <button id="atk">⚔</button>
   <button id="fin">FRUI</button>
+  <button id="dash">»</button>
 </div>
 <div id="start" class="overlay hidden">
   <span class="badge">Orchard engine · web 3D</span>
   <h1>FRUITALITY</h1>
   <p>Rigged fruit warriors, juicy melee, cinematic finishers — running in your browser. Built on the Orchard web-game engine.</p>
-  <div class="controls"><kbd>WASD</kbd><span>Move</span><kbd>Space / Click</kbd><span>Attack</span><kbd>F</kbd><span>Fruitality finisher</span><kbd>R</kbd><span>Restart</span></div>
+  <div class="controls"><kbd>WASD</kbd><span>Move</span><kbd>Space / Click</kbd><span>Attack</span><kbd>Shift</kbd><span>Dash (dodge i-frames)</span><kbd>F</kbd><span>Fruitality finisher</span><kbd>R</kbd><span>Restart</span></div>
   <button class="btn" id="play">▶ Enter the orchard</button>
 </div>
 <div id="end" class="overlay hidden">
@@ -137,6 +139,7 @@ $('again').onclick = () => location.reload();
   stick.addEventListener('touchend', end); stick.addEventListener('touchcancel', end);
   $('atk').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnAttack(); }, { passive: false });
   $('fin').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnFinisher(); }, { passive: false });
+  $('dash').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnDash(); }, { passive: false });
 })();
 boot();
 </script>

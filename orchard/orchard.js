@@ -331,14 +331,33 @@ export class Orchard {
 
   // ---------------------------------------------------------------- input
   _initInput() {
-    addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'f', 'r'].includes(k)) e.preventDefault(); this.keys.add(k); if (k === ' ') this._attack(); if (k === 'f') this._finisher(); if (k === 'r') this.emit('restart'); });
+    addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'f', 'r'].includes(k)) e.preventDefault(); this.keys.add(k); if (k === ' ') this._attack(); if (k === 'f') this._finisher(); if (k === 'shift') this._dash(); if (k === 'r') this.emit('restart'); });
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     addEventListener('mousedown', () => { if (this.state.running) this._attack(); });
     // touch buttons wired by html via game.btnAttack()/btnFinisher()/setStick()
   }
   btnAttack() { this._attack(); }
   btnFinisher() { this._finisher(); }
+  btnDash() { this._dash(); }
   setStick(x, y) { this.touch.x = x; this.touch.y = y; }
+
+  // dash/dodge: quick burst in the move (or facing) direction with i-frames + juice trail
+  _dash() {
+    if (!this.state.running || this.player.dying) return;
+    const P = this.player; if ((P.dashCd || 0) > 0 || (P.dashT || 0) > 0) return;
+    const mv = this._moveVec();
+    const camF = new THREE.Vector3(); this.camera.getWorldDirection(camF); camF.y = 0; camF.normalize();
+    const camR = new THREE.Vector3().crossVectors(camF, new THREE.Vector3(0, 1, 0)).normalize();
+    let dir = new THREE.Vector3().addScaledVector(camR, mv.x).addScaledVector(camF, mv.z);
+    if (dir.lengthSq() < 0.001) dir = P.facing.clone();
+    dir.y = 0; dir.normalize();
+    P.dashDir = dir; P.facing.copy(dir);
+    P.dashT = 0.18; P.dashCd = 0.72; P.iFrame = Math.max(P.iFrame || 0, 0.26);
+    P.state = 'idle'; P._swingDone = false; P.atkCd = Math.max(P.atkCd || 0, 0.05);
+    P.play('run', 0.04);
+    this.audio.dash(); this._shake(0.06, 0.1);
+    this.emit('dash');
+  }
 
   _moveVec() {
     let x = 0, z = 0; const k = this.keys;
@@ -455,10 +474,17 @@ export class Orchard {
     const world = new THREE.Vector3().addScaledVector(camR, mv.x).addScaledVector(camF, mv.z);
     const moving = world.lengthSq() > 0.001;
     if (!P.dying) {
-      if (moving) { world.normalize(); P.facing.lerp(world, 0.22).normalize(); }
+      if (P.dashCd > 0) P.dashCd -= dt;
+      if (P.dashT > 0 && moving) { /* keep dash dir */ } else if (moving) { world.normalize(); P.facing.lerp(world, 0.22).normalize(); }
       if (P.atkCd > 0) P.atkCd -= dt;
       if (P.iFrame > 0) P.iFrame -= dt;
-      if (P.state === 'attack') {
+      if (P.dashT > 0) {
+        P.dashT -= dt;
+        P.group.position.addScaledVector(P.dashDir, st.speed * 3.1 * dt);
+        // juice afterimage trail
+        if (Math.random() < 0.7) this.juice(P.group.position.clone().setY(0.9), this.spec.fighters.player.juice, 2, 1.5, 0.45, 0.45, 3);
+        P.play('run', 0.05);
+      } else if (P.state === 'attack') {
         P.swing -= dt; if (P.swing < 0.14) this._resolveSwing();
         if (P.swing <= 0) { P.state = 'idle'; P._swingDone = false; }
       } else {
@@ -603,6 +629,7 @@ class SfxKit {
   hit() { this.noise(0.07, 0.5, 2600, 400); this.blip(240, .05, 'square', .12, -160); this.blip(1500, .03, 'triangle', .07, -1200); }
   heavy() { this.noise(0.16, 0.7, 1500); this.blip(120, .16, 'sawtooth', .22, -70); this.blip(60, .2, 'sine', .18, -20); }
   swing() { this.noise(0.05, 0.18, 6000, 1500); }
+  dash() { this.noise(0.22, 0.32, 3500, 500); this.blip(520, .16, 'sawtooth', .06, -320); }
   hurt() { this.blip(120, .18, 'triangle', .18, -50); this.noise(0.1, 0.25, 1200); }
   finisher() { this.blip(90, .5, 'sawtooth', .28, -60); this.blip(70, .7, 'sine', .2, 240); this.noise(0.5, 0.5, 3000); setTimeout(() => { this.blip(330, .25, 'square', .12, 200); this.blip(440, .3, 'square', .1, 260); }, 90); }
   wave() { this.blip(330, .18, 'sine', .14, 180); this.blip(660, .22, 'triangle', .1, 220); }
