@@ -65,6 +65,7 @@ export class Orchard {
     this.spec.fighters.player = roster[idx];
     if (this.player) this.scene.remove(this.player.group);
     this._spawnPlayer();
+    if (this.audio) { this.audio._resume(); this.audio.chirp(this.player.voicePitch || 1); }
     this.emit('hp', 1);
   }
   // start the actual fight (waves + music). Triggered by a user gesture (fighter pick).
@@ -251,6 +252,35 @@ export class Orchard {
     }
   }
 
+  // Procedural imperfect/spoiled fruit skin: equirectangular CanvasTexture with
+  // mottling/ripening + soft bruise patches + blemish specks, plus a bump map for
+  // dents. Each fighter gets a unique skin (fruit is never perfect). Returns {map, bump}.
+  _fruitTexture(hex) {
+    const W = 512, H = 256;
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+    const bc = document.createElement('canvas'); bc.width = W; bc.height = H; const bx = bc.getContext('2d');
+    const base = new THREE.Color(hex);
+    const rgb = (col, a = 1) => `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},${a})`;
+    x.fillStyle = rgb(base); x.fillRect(0, 0, W, H);
+    bx.fillStyle = 'rgb(128,128,128)'; bx.fillRect(0, 0, W, H);
+    const blob = (ctx, px, py, r, style) => { const g = ctx.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, style); g.addColorStop(1, style.replace(/[\d.]+\)$/, '0)')); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, r, 0, 7); ctx.fill(); };
+    // mottling / uneven ripening
+    for (let i = 0; i < 80; i++) { const col = base.clone().offsetHSL(0, (Math.random() - 0.5) * 0.07, (Math.random() - 0.5) * 0.34); blob(x, Math.random() * W, Math.random() * H, 10 + Math.random() * 42, rgb(col, 0.5)); }
+    // bruise patches (darker, brownish) + matching dents in the bump map
+    const nB = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < nB; i++) {
+      const px = Math.random() * W, py = 30 + Math.random() * (H - 60), r = 16 + Math.random() * 34;
+      const br = base.clone().multiplyScalar(0.45).offsetHSL(0, -0.12, -0.04);
+      blob(x, px, py, r, rgb(br, 0.72)); blob(x, px, py, r * 0.6, rgb(br, 0.55));
+      blob(bx, px, py, r, 'rgba(64,64,64,0.85)');
+    }
+    // tiny blemish specks
+    for (let i = 0; i < 70; i++) { x.fillStyle = `rgba(40,26,18,${0.25 + Math.random() * 0.4})`; x.beginPath(); x.arc(Math.random() * W, Math.random() * H, 0.8 + Math.random() * 2, 0, 7); x.fill(); }
+    const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
+    const bump = new THREE.CanvasTexture(bc);
+    return { map, bump };
+  }
+
   _makeFighter(def, isPlayer) {
     const rig = { def, isPlayer, hp: def.stats.hp, maxHp: def.stats.hp, state: 'idle', dying: 0, atkCd: 0, flash: 0 };
     rig.group = SkeletonUtils.clone(this.gltf.scene);
@@ -267,7 +297,8 @@ export class Orchard {
     // bones carry a 100x local scale; child local scale = worldRadius / 100
     const bodyR = def.bodyR ?? (isPlayer ? 0.82 : 0.9);
     const s = bodyR / 100;
-    const fruitMat = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.4, metalness: 0.0, emissive: tint.clone(), emissiveIntensity: 0 });
+    const skin = this._fruitTexture(def.juice);
+    const fruitMat = new THREE.MeshStandardMaterial({ map: skin.map, bumpMap: skin.bump, bumpScale: 0.5, roughness: 0.55, metalness: 0.0, emissive: tint.clone(), emissiveIntensity: 0 });
     const body = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 28), fruitMat);
     body.scale.set(s, s * 1.12, s); body.castShadow = true; body.receiveShadow = true;
     torsoBone.add(body); rig.head = body; // (hit-flash + head-pop reuse rig.head)
@@ -304,6 +335,8 @@ export class Orchard {
     };
     rig.gaitPhase = Math.random() * Math.PI * 2;
     rig.wob = 0; rig.wobV = 0; rig._lastSin = 0; // 1D squash spring (jelly jiggle)
+    // voice pitch: bigger fruit = lower/deeper squeak; small = higher
+    rig.voicePitch = isPlayer ? 1.0 : clamp(1.55 - (def.scale ?? 0.95) * 0.42, 0.55, 1.6) * (0.92 + Math.random() * 0.16);
     rig.bodyBaseScale = body.scale.clone();
     // animation
     rig.mixer = new THREE.AnimationMixer(rig.group);
@@ -410,7 +443,7 @@ export class Orchard {
     P.dashT = 0.18; P.dashCd = 0.72; P.iFrame = Math.max(P.iFrame || 0, 0.26);
     P.state = 'idle'; P._swingDone = false; P.atkCd = Math.max(P.atkCd || 0, 0.05);
     P.play('run', 0.04);
-    this.audio.dash(); this._shake(0.06, 0.1);
+    this.audio.dash(); this.audio.effort(this.player.voicePitch || 1); this._shake(0.06, 0.1);
     this.emit('dash');
   }
 
@@ -446,7 +479,7 @@ export class Orchard {
     const o = e.group.position.clone().setY(1.4);
     this.juice(o, e.def.juice, 16, 7.5);
     this._floater(`+${dmg}`, o.clone().setY(2.2), '#fff');
-    this.audio.hit(); this._addCombo(this.spec.combat.pointsHit ?? 6);
+    this.audio.hit(); this.audio.squeak(e.voicePitch); this._addCombo(this.spec.combat.pointsHit ?? 6);
     this.state.hitPause = this.spec.combat.hitPause ?? 0.06; this._shake(0.14, 0.18);
     if (e.hp <= 0) this._kill(e, dir, false);
   }
@@ -464,7 +497,7 @@ export class Orchard {
       this._popHead(e);
       e.group.visible = false;
     }
-    this.audio.heavy();
+    this.audio.heavy(); this.audio.splat();
     if (finisher) { this.state.finishers++; this._floater(e.def.finisher || 'FRUITALITY!', o.clone().setY(3), '#e13c5a'); }
   }
   _finisher() {
@@ -474,8 +507,8 @@ export class Orchard {
     for (const e of this.state.enemies) { if (e.dying) continue; if (e.hp / e.maxHp > (this.spec.combat.finisherThreshold ?? 0.16)) continue; const dd = e.group.position.distanceTo(P); if (dd < st.reach * 1.7 && dd < best) { best = dd; target = e; } }
     if (!target) return;
     this._addCombo(this.spec.combat.pointsFinisher ?? 70);
-    this.state.hitPause = 0.5; this.state.slowmo = 0.95; this.state.flash = 0.4; this._shake(0.26, 0.55);
-    this.audio.finisher(); this.audio.duck(700);
+    this.state.hitPause = 0.5; this.state.slowmo = 0.95; this.state.flash = 0.22; this._shake(0.26, 0.55);
+    this.audio.finisher(); this.audio.duck(700); this.audio.chirp(1.25);
     this._camFinisher(target.group.position.clone());
     const dir = P.clone().sub(target.group.position).setY(0).normalize();
     this._kill(target, dir, true);
@@ -485,7 +518,7 @@ export class Orchard {
     if (this.player.iFrame > 0 || this.player.dying) return;
     this.player.hp -= dmg; this.player.iFrame = 0.5; this.player.wobV = (this.player.wobV || 0) + 0.7;
     this.juice(this.player.group.position.clone().setY(1.3), this.spec.fighters.player.juice, 12, 6);
-    this.audio.hurt(); this._shake(0.18, 0.22);
+    this.audio.hurt(); this.audio.grunt(); this._shake(0.18, 0.22);
     if (this.player.hp <= 0) { this.player.dying = 99; this.player.play('death'); this._end(false); }
   }
 
@@ -498,7 +531,7 @@ export class Orchard {
   }
   _floater(text, pos, color) { this.state.floaters.push({ text, pos: pos.clone(), color, life: 1 }); }
   _shake(mag, dur) { this.state.shake.mag = Math.max(this.state.shake.mag, mag); this.state.shake.t = Math.max(this.state.shake.t, dur); }
-  _camFinisher(focus) { this.cam = { fin: true, t: 1.8, focus }; }
+  _camFinisher(focus) { this.cam = { fin: true, t: 2.0, dur: 2.0, focus }; this.emit('cinematic', true); }
 
   _end(won) {
     if (this.state.finished) return;
@@ -626,7 +659,7 @@ export class Orchard {
 
     // fx decay
     if (this.state.shake.t > 0) this.state.shake.t -= dt; else this.state.shake.mag = 0;
-    if (this.state.flash > 0) this.state.flash = Math.max(0, this.state.flash - dt * 1.5);
+    if (this.state.flash > 0) this.state.flash = Math.max(0, this.state.flash - raw * 2.8); // real-time decay (punch, not a wash through slow-mo)
 
     this._updateCamera(dt);
   }
@@ -634,10 +667,16 @@ export class Orchard {
   _updateCamera(dt) {
     const P = this.player.group.position;
     if (this.cam && this.cam.fin) {
-      this.cam.t -= dt; const t = 1 - this.cam.t / 1.8; const a = t * Math.PI * 0.85, r = 5 + Math.cos(t * Math.PI) * 1.5;
-      this.camera.position.set(this.cam.focus.x + Math.cos(a) * r, 2.6 + Math.sin(t * Math.PI) * 3, this.cam.focus.z + Math.sin(a) * r);
-      this.camera.lookAt(this.cam.focus.x, this.cam.focus.y + 1, this.cam.focus.z);
-      if (this.cam.t <= 0) this.cam.fin = false;
+      this.cam.t -= dt; const u = clamp(1 - this.cam.t / this.cam.dur, 0, 1);
+      const ein = 1 - Math.pow(1 - u, 3); // ease-out punch-in
+      const a = -0.7 + ein * 1.7;         // slow dramatic orbit (~100°)
+      const r = lerp(7.5, 3.3, ein);      // punch in close
+      const y = this.cam.focus.y + 1.0 + Math.sin(u * Math.PI) * 1.7; // low, rises, settles
+      this.camera.position.set(this.cam.focus.x + Math.cos(a) * r, y, this.cam.focus.z + Math.sin(a) * r);
+      const lk = new THREE.Vector3(this.cam.focus.x, this.cam.focus.y + 1.1, this.cam.focus.z);
+      if (this.state.shake.t > 0) { const i = this.state.shake.t / 0.5; lk.x += rand(-1, 1) * this.state.shake.mag * i * 3; lk.y += rand(-1, 1) * this.state.shake.mag * i * 1.5; }
+      this.camera.lookAt(lk);
+      if (this.cam.t <= 0) { this.cam.fin = false; this.emit('cinematic', false); }
     } else {
       const f = this.player.facing;
       const want = new THREE.Vector3(P.x - f.x * 12, P.y + 9, P.z - f.z * 12);
@@ -689,6 +728,19 @@ class SfxKit {
   swing() { this.noise(0.05, 0.18, 6000, 1500); }
   dash() { this.noise(0.22, 0.32, 3500, 500); this.blip(520, .16, 'sawtooth', .06, -320); }
   step(big) { this.noise(big ? 0.09 : 0.05, big ? 0.10 : 0.05, big ? 500 : 800); }
+  // --- squeaky cartoon-fruit voices (formant-ish: osc -> bandpass -> env) ---
+  voice(f, dur, bend, type = 'sawtooth', g = 0.16, fc = 1500, q = 7) {
+    if (!this.ok) return; const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(Math.max(50, f + bend), t + dur);
+    const bp = this.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fc; bp.Q.value = q;
+    const gn = this.ctx.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(g, t + 0.012); gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(bp).connect(gn).connect(this.sfx); o.start(t); o.stop(t + dur + 0.02);
+  }
+  squeak(p = 1) { const f = 680 * p; this.voice(f, 0.12, f * 0.8, 'sawtooth', 0.15, 1600, 8); this.voice(f * 1.5, 0.09, -f * 0.5, 'square', 0.05, 2400, 10); }
+  splat() { this.voice(190, 0.22, -130, 'sawtooth', 0.18, 800, 4); this.noise(0.18, 0.38, 1400); }
+  chirp(p = 1) { this.voice(480 * p, 0.13, 420 * p, 'square', 0.12, 1800, 7); }
+  grunt() { this.voice(165, 0.16, -60, 'sawtooth', 0.16, 700, 5); }
+  effort(p = 1) { this.voice(430 * p, 0.1, 260, 'square', 0.1, 1600, 6); }
   hurt() { this.blip(120, .18, 'triangle', .18, -50); this.noise(0.1, 0.25, 1200); }
   finisher() { this.blip(90, .5, 'sawtooth', .28, -60); this.blip(70, .7, 'sine', .2, 240); this.noise(0.5, 0.5, 3000); setTimeout(() => { this.blip(330, .25, 'square', .12, 200); this.blip(440, .3, 'square', .1, 260); }, 90); }
   wave() { this.blip(330, .18, 'sine', .14, 180); this.blip(660, .22, 'triangle', .1, 220); }

@@ -44,6 +44,16 @@
   .fcard .bar i{font-style:normal;width:26px;text-align:left;letter-spacing:.05em;}
   .fcard .bar u{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;}
   .fcard .bar u s{display:block;height:100%;border-radius:3px;background:var(--c);}
+  /* cinematic finisher: letterbox bars + FRUITALITY title flash */
+  #lb{position:fixed;inset:0;z-index:14;pointer-events:none;}
+  #lb b{position:absolute;left:0;right:0;height:11vh;background:#000;display:block;}
+  #lb b.t{top:0;transform:translateY(-100%);transition:transform .32s cubic-bezier(.2,.8,.2,1);border-bottom:2px solid rgba(225,60,90,.55);box-shadow:0 2px 16px rgba(225,60,90,.35);}
+  #lb b.b{bottom:0;transform:translateY(100%);transition:transform .32s cubic-bezier(.2,.8,.2,1);border-top:2px solid rgba(225,60,90,.55);box-shadow:0 -2px 16px rgba(225,60,90,.35);}
+  #lb.on b.t,#lb.on b.b{transform:translateY(0);}
+  #fintitle{position:fixed;inset:0;z-index:15;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;}
+  #fintitle span{font-weight:900;font-size:clamp(2.4rem,11vw,7rem);color:#fff;letter-spacing:-.02em;-webkit-text-stroke:3px #5a0a1e;paint-order:stroke fill;text-shadow:0 0 48px var(--melon),0 4px 0 #3a0512,0 8px 34px rgba(0,0,0,.95);}
+  #fintitle.on{animation:fin 1.35s ease-out;}
+  @keyframes fin{0%{opacity:0;transform:scale(1.7)}12%{opacity:1;transform:scale(1)}80%{opacity:1;transform:scale(1.03)}100%{opacity:0;transform:scale(1.06)}}
   #loading{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;gap:1rem;align-items:center;justify-content:center;background:#06060a;}
   .spin{width:46px;height:46px;border-radius:50%;border:4px solid rgba(255,255,255,.1);border-top-color:var(--melon);animation:s 1s linear infinite;}
   @keyframes s{to{transform:rotate(360deg);}}
@@ -76,6 +86,8 @@
   </div>
 </div>
 <div id="banner"></div>
+<div id="lb"><b class="t"></b><b class="b"></b></div>
+<div id="fintitle"><span>FRUITALITY</span></div>
 <div class="touch">
   <div id="stick"><div id="nub"></div></div>
   <button id="atk">⚔</button>
@@ -109,6 +121,7 @@ function wireHud(g) {
   g.on('wave', (w) => $('wave').textContent = w);
   g.on('count', c => $('count').textContent = c);
   g.on('banner', (t, s) => { const b = $('banner'); b.innerHTML = t + (s ? `<small>${s}</small>` : ''); b.classList.add('show'); clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), 1500); });
+  g.on('cinematic', (on) => { $('lb').classList.toggle('on', on); if (on) { const ft = $('fintitle'); ft.classList.remove('on'); void ft.offsetWidth; ft.classList.add('on'); } });
   g.on('restart', () => location.reload());
   g.on('end', (r) => { $('endt').textContent = r.won ? 'JUICED.' : 'YOU GOT PEELED.'; $('endm').textContent = `${r.won ? 'All waves cleared.' : 'The fruit got you.'}  Rank ${r.rank === 'None' ? 'D' : r.rank} · ${r.score} pts · ${r.finishers} Fruitalities`; $('end').classList.remove('hidden'); });
   // floaters
