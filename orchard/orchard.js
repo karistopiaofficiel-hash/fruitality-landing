@@ -540,6 +540,8 @@ export class Orchard {
   // ---------------------------------------------------------------- combat
   _attack() {
     if (!this.state.running || this.player.dying) return;
+    if (this.state.finisher) return;
+    if (this.state.grabbed) { this._swingHeld(); return; } // holding a body → swing it as a club
     if (this.player.atkCd > 0) return;
     const st = this.spec.fighters.player.stats, P = this.player;
     // combo chain: two quick jabs then a HEAVY slam (3rd hit). resets if you pause.
@@ -707,7 +709,6 @@ export class Orchard {
     this._addCombo(this.spec.combat.pointsFinisher ?? 70); this._addRage(0.18);
     this.state.hitPause = 0.08; this.state.slowmo = 1.3; this.state.flash = 0.16; // brief freeze, then slow-mo through the move
     this.audio.finisher(); this.audio.duck(800); this.audio.chirp(1.25);
-    this._camFinisher(target.group.position.clone());
     // dir points from victim -> player (player faces the OPPOSITE, toward victim)
     const dir = P.clone().sub(target.group.position).setY(0).normalize();
     const faceDir = dir.clone().multiplyScalar(-1); // player faces the victim
@@ -715,6 +716,7 @@ export class Orchard {
     const label = weapon ? (weapon.type === 'mixer' ? 'BLENDED!' : 'SLICED!') : (pdef.finisher || 'FRUITALITY!');
     // signature move per fighter (overhead SLAM / body PRESS / jab FLURRY / CRACK headbutt)
     const move = weapon ? 'slice' : (pdef.finMove || 'slam');
+    this._camFinisher(target.group.position.clone(), move, faceDir); // per-move cinematic camera
     // lock the victim in place; make the player invulnerable through the sequence
     target.atkCd = 999; target.vel.set(0, 0, 0); target._finVictim = true;
     this.player.iFrame = 3.0; this.player.atkAnim = 0; this.player.state = 'finisher';
@@ -808,10 +810,43 @@ export class Orchard {
     this.state.grabbed = target; target.vel.set(0, 0, 0); target.atkCd = 999; target._ramCd = 0;
     this.audio.swing(); this.audio.squeak(target.voicePitch);
     this._floater('GRABBED', target.group.position.clone().setY(3), '#fff');
-    this.emit('banner', 'GRABBED', 'drag & bludgeon · E to throw');
+    this.emit('banner', 'GRABBED', 'SPACE swing · E throw · drag = juice trail');
+  }
+  // swing the grabbed fruit overhead like a club (attack while holding)
+  _swingHeld() {
+    const e = this.state.grabbed, P = this.player; if (!e) return;
+    if ((P.heldSwingT || 0) > 0) return; // mid-swing
+    P.heldSwingT = 0.42; e._swHit = false;
+    this.audio.swing(); this.audio.effort(P.voicePitch || 1); this._shake(0.1, 0.12);
   }
   _updateHeld(e, dt) {
     const P = this.player, f = P.facing;
+    // --- ACTIVE SWING: arc the body from overhead-back down to the front, AoE on the downswing ---
+    if ((P.heldSwingT || 0) > 0) {
+      P.heldSwingT -= dt; const s = clamp(1 - P.heldSwingT / 0.42, 0, 1); // 0..1 through the swing
+      const ang = lerp(-1.25, 1.05, s);                                   // overhead-behind → slammed-front
+      const reach = 2.6, hx = Math.cos(ang), hy = Math.sin(ang + 0.55);
+      e.group.position.set(P.group.position.x + f.x * hx * reach, Math.max(0.4, 1.3 + hy * 1.7), P.group.position.z + f.z * hx * reach);
+      e.group.lookAt(P.group.position.x, e.group.position.y, P.group.position.z); e.group.rotateX(s * 2.4);
+      this.juice(e.group.position.clone(), e.def.juice, 4, 3, 0.5, 0.4, 9);   // heavy spray off the swung body
+      this._puddle(e.group.position.clone().setY(0), e.def.juice, 0.4);
+      // impact on the downswing
+      if (!e._swHit && s > 0.5) {
+        e._swHit = true; let any = false;
+        for (const o of this.state.enemies) {
+          if (o === e || o.dying || o.thrown > 0 || o === this.state.grabbed) continue;
+          if (o.group.position.distanceTo(e.group.position) < 2.8) {
+            const dir = o.group.position.clone().sub(P.group.position).setY(0).normalize();
+            this._hurt(o, 30, dir); any = true;
+          }
+        }
+        e.hp -= e.maxHp * 0.12; this._shake(0.24, 0.26); this.audio.heavy();
+        if (any) { this._floater('WHACK!', e.group.position.clone().setY(2.4), '#ff5277'); this._addRage(0.05); }
+      }
+      if (e.bodyMats) e.bodyMats.forEach(m => m.emissiveIntensity = 0.5);
+      if (e.hp <= 0) { this.state.grabbed = null; P.heldSwingT = 0; this._kill(e, f.clone(), false); }
+      return; // skip passive drag while swinging
+    }
     const tgt = new THREE.Vector3(P.group.position.x - f.x * 2.3, 0.45, P.group.position.z - f.z * 2.3);
     e.group.position.lerp(tgt, 1 - Math.pow(0.0006, dt)); // lag = drag trail
     e.group.lookAt(P.group.position.x, 0.45, P.group.position.z); e.group.rotateX(-0.7); // dragged-on-its-back tilt
@@ -866,7 +901,12 @@ export class Orchard {
   }
   _floater(text, pos, color) { this.state.floaters.push({ text, pos: pos.clone(), color, life: 1 }); }
   _shake(mag, dur) { this.state.shake.mag = Math.max(this.state.shake.mag, mag); this.state.shake.t = Math.max(this.state.shake.t, dur); }
-  _camFinisher(focus) { this.cam = { fin: true, t: 2.0, dur: 2.0, focus }; this.emit('cinematic', true); }
+  _camFinisher(focus, style = 'slam', dir = null) {
+    const d = dir ? dir.clone().setY(0).normalize() : new THREE.Vector3(0, 0, 1);
+    const side = new THREE.Vector3(-d.z, 0, d.x).normalize(); // perpendicular to the strike
+    this.cam = { fin: true, t: 2.0, dur: 2.0, focus: focus.clone(), style, dir: d, side };
+    this.emit('cinematic', true);
+  }
 
   _end(won) {
     if (this.state.finished) return;
@@ -1061,11 +1101,39 @@ export class Orchard {
     if (this.cam && this.cam.fin) {
       this.cam.t -= dt; const u = clamp(1 - this.cam.t / this.cam.dur, 0, 1);
       const ein = 1 - Math.pow(1 - u, 3); // ease-out punch-in
-      const a = -0.7 + ein * 1.7;         // slow dramatic orbit (~100°)
-      const r = lerp(7.5, 3.3, ein);      // punch in close
-      const y = this.cam.focus.y + 1.0 + Math.sin(u * Math.PI) * 1.7; // low, rises, settles
-      this.camera.position.set(this.cam.focus.x + Math.cos(a) * r, y, this.cam.focus.z + Math.sin(a) * r);
-      const lk = new THREE.Vector3(this.cam.focus.x, this.cam.focus.y + 1.1, this.cam.focus.z);
+      const fc = this.cam.focus, d = this.cam.dir || new THREE.Vector3(0, 0, 1), side = this.cam.side || new THREE.Vector3(1, 0, 0);
+      const style = this.cam.style || 'slam';
+      let pos, lkY = fc.y + 1.1;
+      if (style === 'press') {
+        // PINEAPPLE — side-on dolly that tracks IN along the barge (profile of the crush)
+        const r = lerp(9, 4.2, ein), sgn = 1;
+        pos = new THREE.Vector3(fc.x + side.x * r * sgn, fc.y + 1.5 + Math.sin(u * Math.PI) * 0.5, fc.z + side.z * r * sgn);
+        lkY = fc.y + 1.0;
+      } else if (style === 'crack') {
+        // COCONUT — pull BACK during the wind-up, then SNAP in hard on the headbutt (~u 0.3)
+        const punch = u < 0.32 ? lerp(5.0, 8.0, u / 0.32) : lerp(8.0, 2.6, clamp((u - 0.32) / 0.28, 0, 1));
+        pos = new THREE.Vector3(fc.x - d.x * punch + side.x * 1.6, fc.y + 2.6 - ein * 1.2, fc.z - d.z * punch + side.z * 1.6);
+        lkY = fc.y + 1.3;
+      } else if (style === 'flurry') {
+        // KIWI — energetic low fast orbit with tiny jolts during the jab storm
+        const a = -0.5 + ein * 2.7 + Math.sin(u * 34) * 0.06 * (1 - u);
+        const r = lerp(7, 3.2, ein);
+        pos = new THREE.Vector3(fc.x + Math.cos(a) * r, fc.y + 1.2 + Math.sin(u * Math.PI) * 1.2, fc.z + Math.sin(a) * r);
+      } else if (style === 'slice') {
+        // WEAPON — smooth full orbit around the cut
+        const a = Math.atan2(d.z, d.x) + ein * Math.PI * 1.7;
+        const r = lerp(6.8, 3.5, ein);
+        pos = new THREE.Vector3(fc.x + Math.cos(a) * r, fc.y + 1.7 + Math.sin(u * Math.PI) * 0.4, fc.z + Math.sin(a) * r);
+        lkY = fc.y + 1.3;
+      } else {
+        // SLAM (melon) — low 3/4 hero angle from the victim's FRONT-side: frames the melon
+        // smashing DOWN onto the victim. Punch in + rise into the smash.
+        const r = lerp(8.5, 4.4, ein);
+        pos = new THREE.Vector3(fc.x + d.x * r * 0.55 + side.x * r * 0.85, fc.y + 0.9 + Math.sin(u * Math.PI) * 1.9, fc.z + d.z * r * 0.55 + side.z * r * 0.85);
+        lkY = fc.y + 1.6;
+      }
+      this.camera.position.copy(pos);
+      const lk = new THREE.Vector3(fc.x, lkY, fc.z);
       if (this.state.shake.t > 0) { const i = this.state.shake.t / 0.5; lk.x += rand(-1, 1) * this.state.shake.mag * i * 3; lk.y += rand(-1, 1) * this.state.shake.mag * i * 1.5; }
       this.camera.lookAt(lk);
       if (this.cam.t <= 0) { this.cam.fin = false; this.emit('cinematic', false); }
