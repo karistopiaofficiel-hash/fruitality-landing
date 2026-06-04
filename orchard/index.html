@@ -16,6 +16,13 @@
   .lbl{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:4px;}
   .bar{height:14px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);overflow:hidden;}
   .fill{height:100%;border-radius:99px;background:var(--melon);box-shadow:0 0 12px var(--melon);transition:width .15s;}
+  .fill.rage{background:linear-gradient(90deg,#ff8a3a,#ff2a2a);box-shadow:0 0 12px #ff5a2a;}
+  .bar.ready{animation:ragepulse .6s ease-in-out infinite;border-color:#ff3a3a;}
+  @keyframes ragepulse{0%,100%{box-shadow:0 0 6px #ff3a3a}50%{box-shadow:0 0 20px #ff5a2a}}
+  #ragehint{color:#ff7a5a;font-weight:800;letter-spacing:.12em;}
+  .weap{margin-top:8px;display:none;align-items:center;gap:.4rem;justify-content:flex-end;font-weight:800;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;}
+  .weap.on{display:flex;}
+  .weap .dot{width:12px;height:12px;border-radius:50%;box-shadow:0 0 10px currentColor;background:currentColor;}
   .mid{text-align:center;min-width:140px;}
   .rank{font-weight:900;font-size:clamp(1.4rem,4vw,2.1rem);color:var(--banana);line-height:1;}
   .pts{font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-top:3px;}
@@ -66,6 +73,7 @@
   #atk{position:absolute;right:1.4rem;bottom:1.4rem;width:94px;height:94px;border-radius:50%;background:rgba(249,212,58,.6);border:3px solid rgba(255,255,255,.7);color:#fff;font-size:1.5rem;font-weight:900;pointer-events:auto;}
   #fin{position:absolute;right:1.6rem;bottom:150px;width:78px;height:78px;border-radius:50%;background:rgba(225,60,90,.7);border:3px solid rgba(255,255,255,.7);color:#fff;font-size:.95rem;font-weight:900;pointer-events:auto;opacity:.5;}
   #dash{position:absolute;right:124px;bottom:1.6rem;width:72px;height:72px;border-radius:50%;background:rgba(123,199,77,.55);border:3px solid rgba(255,255,255,.6);color:#fff;font-size:1.5rem;font-weight:900;pointer-events:auto;}
+  #ramp{position:absolute;right:1.6rem;bottom:240px;width:74px;height:74px;border-radius:50%;background:rgba(255,60,60,.6);border:3px solid rgba(255,180,120,.85);color:#fff;font-size:1.7rem;font-weight:900;pointer-events:auto;box-shadow:0 0 16px rgba(255,80,40,.5);}
   a.back{position:fixed;top:.7rem;right:.7rem;z-index:13;color:var(--dim);text-decoration:none;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:.4rem .7rem;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.12);border-radius:8px;}
 </style>
 <script type="importmap">
@@ -80,9 +88,12 @@
 <canvas id="g"></canvas>
 <div id="hud">
   <div class="top">
-    <div class="hpwrap"><div class="lbl">🍉 Wrecking Melon</div><div class="bar"><div id="hp" class="fill" style="width:100%"></div></div></div>
+    <div class="hpwrap">
+      <div class="lbl">🍉 Wrecking Melon</div><div class="bar"><div id="hp" class="fill" style="width:100%"></div></div>
+      <div class="lbl" style="margin-top:6px">⚡ Rampage <span id="ragehint"></span></div><div class="bar"><div id="rage" class="fill rage" style="width:0%"></div></div>
+    </div>
     <div class="mid"><div id="rank" class="rank">—</div><div class="pts"><span id="pts">0</span> pts</div></div>
-    <div class="right"><div class="lbl">Wave <span id="wave">1</span>/3 · <span id="count">0</span> left</div></div>
+    <div class="right"><div class="lbl">Wave <span id="wave">1</span>/3 · <span id="count">0</span> left</div><div id="weap" class="weap"></div></div>
   </div>
 </div>
 <div id="banner"></div>
@@ -93,6 +104,7 @@
   <button id="atk">⚔</button>
   <button id="fin">FRUI</button>
   <button id="dash">»</button>
+  <button id="ramp">⚡</button>
 </div>
 <div id="start" class="overlay hidden">
   <span class="badge">Orchard engine · web 3D</span>
@@ -100,7 +112,7 @@
   <p>Rigged fruit warriors, juicy melee, cinematic finishers — running in your browser. Built on the Orchard web-game engine.</p>
   <div class="pick">Choose your fighter</div>
   <div class="roster" id="roster"></div>
-  <div class="controls"><kbd>WASD</kbd><span>Move</span><kbd>Space / Click</kbd><span>Attack</span><kbd>Shift</kbd><span>Dash (dodge i-frames)</span><kbd>F</kbd><span>Fruitality finisher</span><kbd>R</kbd><span>Restart</span></div>
+  <div class="controls"><kbd>WASD</kbd><span>Move</span><kbd>Space / Click</kbd><span>Attack</span><kbd>Shift</kbd><span>Dash (dodge i-frames)</span><kbd>F</kbd><span>Finisher / RIP</span><kbd>Q</kbd><span>RAMPAGE — rip them in two</span><kbd>R</kbd><span>Restart</span></div>
 </div>
 <div id="end" class="overlay hidden">
   <span class="badge">Run complete</span>
@@ -122,6 +134,17 @@ function wireHud(g) {
   g.on('count', c => $('count').textContent = c);
   g.on('banner', (t, s) => { const b = $('banner'); b.innerHTML = t + (s ? `<small>${s}</small>` : ''); b.classList.add('show'); clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), 1500); });
   g.on('cinematic', (on) => { $('lb').classList.toggle('on', on); if (on) { const ft = $('fintitle'); ft.classList.remove('on'); void ft.offsetWidth; ft.classList.add('on'); } });
+  g.on('rage', (rage, rageT) => {
+    const bar = $('rage'); bar.style.width = (rageT > 0 ? 100 : Math.round(rage * 100)) + '%';
+    bar.parentElement.classList.toggle('ready', rage >= 1 && rageT <= 0);
+    $('ragehint').textContent = rageT > 0 ? 'ACTIVE ' + Math.ceil(rageT) + 's' : (rage >= 1 ? '— Q / ⚡' : '');
+  });
+  g.on('weapon', (w) => {
+    const el = $('weap');
+    if (!w) { el.classList.remove('on'); el.innerHTML = ''; return; }
+    el.classList.add('on'); el.style.color = '#' + w.col.toString(16).padStart(6, '0');
+    el.innerHTML = '<span class="dot"></span>' + w.tier + ' ' + w.type;
+  });
   g.on('restart', () => location.reload());
   g.on('end', (r) => { $('endt').textContent = r.won ? 'JUICED.' : 'YOU GOT PEELED.'; $('endm').textContent = `${r.won ? 'All waves cleared.' : 'The fruit got you.'}  Rank ${r.rank === 'None' ? 'D' : r.rank} · ${r.score} pts · ${r.finishers} Fruitalities`; $('end').classList.remove('hidden'); });
   // floaters
@@ -183,6 +206,7 @@ $('again').onclick = () => location.reload();
   $('atk').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnAttack(); }, { passive: false });
   $('fin').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnFinisher(); }, { passive: false });
   $('dash').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnDash(); }, { passive: false });
+  $('ramp').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnRampage(); }, { passive: false });
 })();
 boot();
 </script>

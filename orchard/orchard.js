@@ -32,9 +32,11 @@ export class Orchard {
       running: false, finished: false, won: false, t: 0,
       hitPause: 0, slowmo: 0, flash: 0,
       shake: { mag: 0, t: 0 },
-      wave: 0, enemies: [], parts: [], gibs: [], puddles: [], floaters: [], waveActive: false, toSpawn: 0,
+      wave: 0, enemies: [], parts: [], gibs: [], puddles: [], floaters: [], fountains: [], pickups: [], waveActive: false, toSpawn: 0,
       combo: { points: 0, rank: 'None', last: -10 },
       finishers: 0,
+      rage: 0, rageT: 0,        // RAMPAGE meter (0..1) + active timer (s)
+      weapon: null,             // grabbed cutting weapon { type, tier, t }
     };
     this.keys = new Set();
     this.touch = { x: 0, y: 0 };
@@ -466,7 +468,7 @@ export class Orchard {
 
   // ---------------------------------------------------------------- input
   _initInput() {
-    addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'f', 'r'].includes(k)) e.preventDefault(); this.keys.add(k); if (k === ' ') this._attack(); if (k === 'f') this._finisher(); if (k === 'shift') this._dash(); if (k === 'r') this.emit('restart'); });
+    addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'f', 'r'].includes(k)) e.preventDefault(); this.keys.add(k); if (k === ' ') this._attack(); if (k === 'f') this._finisher(); if (k === 'shift') this._dash(); if (k === 'q') this._rampage(); if (k === 'r') this.emit('restart'); });
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     addEventListener('mousedown', () => { if (this.state.running) this._attack(); });
     // touch buttons wired by html via game.btnAttack()/btnFinisher()/setStick()
@@ -526,40 +528,127 @@ export class Orchard {
     const o = e.group.position.clone().setY(1.4);
     this.juice(o, e.def.juice, 16, 7.5);
     this._floater(`+${dmg}`, o.clone().setY(2.2), '#fff');
-    this.audio.hit(); this.audio.squeak(e.voicePitch); this._addCombo(this.spec.combat.pointsHit ?? 6);
+    this.audio.hit(); this.audio.squeak(e.voicePitch); this._addCombo(this.spec.combat.pointsHit ?? 6); this._addRage(0.05);
     this.state.hitPause = this.spec.combat.hitPause ?? 0.06; this._shake(0.14, 0.18);
     if (e.hp <= 0) this._kill(e, dir, false);
   }
-  _kill(e, dir, finisher) {
-    e.dying = finisher ? 0.1 : 1.4; e.state = 'dead'; e.play('death', 0.08);
+  _kill(e, dir, finisher, opts = {}) {
+    const rip = !!opts.rip, weapon = opts.weapon || null;
+    const mixer = weapon && weapon.type === 'mixer';
+    e.dying = finisher ? (rip ? 0.05 : 0.1) : 1.4; e.state = 'dead'; e.play('death', 0.08);
     const o = e.group.position.clone().setY(1.2);
-    // GORE: juice geyser in the victim's color (normal-blended = reads as juice, not light)
-    this.juice(o, e.def.juice, finisher ? 90 : 38, finisher ? 16 : 11, 1.5, finisher ? 0.6 : 0.5, finisher ? 10 : 13);
+    // GORE: juice geyser in the victim's color (scaled up hard for a RIP)
+    this.juice(o, e.def.juice, finisher ? (rip ? 170 : 90) : 38, finisher ? 16 : 11, 1.5, finisher ? 0.6 : 0.5, finisher ? 10 : 13);
     this.juice(o, 0xfff4d0, 8, 5, 0.6, 0.32);
-    // GORE: dismemberment chunks fly off + juice stains the floor
-    this._gib(o, e.def.juice, finisher ? 16 : 6, finisher ? 12 : 7, finisher);
-    this._puddle(e.group.position.clone(), e.def.juice, finisher ? 2.6 : 1.5);
+    // GORE: dismemberment chunks + floor stain
+    this._gib(o, e.def.juice, finisher ? (mixer ? 36 : rip ? 18 : 16) : 6, finisher ? 13 : 7, finisher);
+    this._puddle(e.group.position.clone(), e.def.juice, finisher ? (rip ? 3.4 : 2.6) : 1.5);
     if (finisher) {
-      // FRUITALITY: the head pops clean off + the body is torn apart (hidden → it "became" the gibs)
-      this._popHead(e);
-      e.group.visible = false;
+      this._popHead(e); e.group.visible = false;
+      if (rip) {
+        // RIP IN TWO: two big half-chunks fly apart + a sustained JUICE FOUNTAIN
+        this._ripHalves(e, dir, mixer ? 4 : 2);
+        this._fountain(e.group.position.clone().setY(1.3), e.def.juice, 1.4, mixer ? 11 : 7);
+        this._fountain(e.group.position.clone().setY(1.4), 0xfff4d0, 0.6, 2);
+        this._shake(0.45, 0.55);
+      }
     }
     this.audio.heavy(); this.audio.splat();
-    if (finisher) { this.state.finishers++; this._floater(e.def.finisher || 'FRUITALITY!', o.clone().setY(3), '#e13c5a'); }
+    if (finisher) {
+      this.state.finishers++; this._floater(opts.label || e.def.finisher || 'FRUITALITY!', o.clone().setY(3), '#e13c5a');
+      // chance to drop a rarity cutting weapon (more likely on a RIP)
+      if (!this.state.weapon && this.state.pickups.length < 2 && Math.random() < (rip ? 0.55 : 0.32)) this._spawnPickup(e.group.position.clone());
+    }
+  }
+  // two (or more) big halves of the victim torn apart, flung perpendicular to the rip
+  _ripHalves(e, dir, n = 2) {
+    const o = e.group.position.clone().setY(1.4); const col = new THREE.Color(e.def.juice);
+    const side = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+    for (let i = 0; i < n; i++) {
+      const sgn = i % 2 ? 1 : -1, sz = (n > 2 ? 0.34 : 0.55) * (e.def.scale ?? 1);
+      const m = new THREE.Mesh(this._gibGeo[Math.floor(Math.random() * this._gibGeo.length)], new THREE.MeshStandardMaterial({ color: col, roughness: .5, emissive: col.clone().multiplyScalar(.12) }));
+      m.scale.setScalar(sz); m.position.copy(o).addScaledVector(side, sgn * 0.2); m.castShadow = true; this.scene.add(m);
+      const v = side.clone().multiplyScalar(sgn * rand(3, 5.5)); v.y = rand(5, 8.5);
+      this.state.gibs.push({ mesh: m, v, av: new THREE.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9)), life: rand(3, 4.6), max: 4.6, size: sz, rest: false });
+    }
+  }
+  // sustained juice fountain (vs the instant burst): emits upward over `dur` seconds
+  _fountain(origin, hex, dur = 1.2, rate = 6) {
+    this.state.fountains.push({ pos: origin.clone(), col: hex, t: dur, rate });
+  }
+  _addRage(amt) {
+    if (this.state.rageT > 0) return;
+    const b = this.state.rage; this.state.rage = clamp(this.state.rage + amt, 0, 1);
+    if (b < 1 && this.state.rage >= 1) { this.emit('banner', 'RAMPAGE READY', 'press Q / tap ⚡'); this.audio.wave(); }
+    this.emit('rage', this.state.rage, this.state.rageT);
+  }
+  _rampage() {
+    if (!this.state.running || this.player.dying || this.state.rageT > 0 || this.state.rage < 1) return;
+    this.state.rageT = 8; this.state.rage = 0;
+    this.emit('banner', 'RAMPAGE!', 'RIP THEM APART'); this.emit('rage', 0, this.state.rageT);
+    this.state.flash = 0.3; this._shake(0.3, 0.4); this.audio.finisher(); this.audio.chirp(0.8);
+  }
+  btnRampage() { this._rampage(); }
+
+  // ---- rarity cutting weapons (rare -> mythic), grabbable, single-use on the next finisher ----
+  _weaponMesh(type, col) {
+    const g = new THREE.Group();
+    const steel = new THREE.MeshStandardMaterial({ color: 0xcfd6df, roughness: 0.22, metalness: 0.95 });
+    const handle = new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 0.7 });
+    if (type === 'mixer') {
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 1.1, 16), steel));
+      for (let i = 0; i < 4; i++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.05, 0.18), steel); bl.position.y = 0.45; bl.rotation.y = i * Math.PI / 2; g.add(bl); }
+    } else if (type === 'cleaver') {
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.2, 0.06), steel));
+      const h = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), handle); h.position.y = -0.85; g.add(h);
+    } else if (type === 'saw') {
+      const d = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.06, 20), steel); d.rotation.x = Math.PI / 2; g.add(d);
+      for (let i = 0; i < 14; i++) { const t = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.14), steel); const a = i / 14 * Math.PI * 2; t.position.set(Math.cos(a) * 0.72, Math.sin(a) * 0.72, 0); g.add(t); }
+    } else { // knife
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.35, 0.04), steel); bl.position.y = 0.35; g.add(bl);
+      const h = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), handle); h.position.y = -0.5; g.add(h);
+    }
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 12), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false })));
+    g.traverse(n => { if (n.isMesh) n.castShadow = true; });
+    return g;
+  }
+  _spawnPickup(pos, forceTier) {
+    const tiers = [['rare', 0x4ea0ff, 0.5], ['epic', 0xb24cff, 0.3], ['legendary', 0xffc83a, 0.15], ['mythic', 0xff3a5a, 0.05]];
+    let tier = forceTier;
+    if (!tier) { let r = Math.random(), acc = 0; for (const [n, , p] of tiers) { acc += p; if (r <= acc) { tier = n; break; } } tier = tier || 'rare'; }
+    const col = (tiers.find(t => t[0] === tier) || tiers[0])[1];
+    const type = ['knife', 'cleaver', 'mixer', 'saw'][Math.floor(Math.random() * 4)];
+    const mesh = this._weaponMesh(type, col); const baseY = 1.5;
+    mesh.position.set(pos.x, baseY, pos.z); mesh.scale.setScalar(0.85); this.scene.add(mesh);
+    this.state.pickups.push({ mesh, type, tier, col, baseY, ph: Math.random() * 6, t: 15 });
+    while (this.state.pickups.length > 4) { const p = this.state.pickups.shift(); this.scene.remove(p.mesh); }
+    this.emit('banner', tier.toUpperCase() + ' ' + type.toUpperCase(), 'grab it!');
+  }
+  _grabWeapon(pk) {
+    this.state.weapon = { type: pk.type, tier: pk.tier, col: pk.col };
+    this.audio.chirp(1.4); this.audio.wave();
+    this.emit('weapon', this.state.weapon);
+    this._floater(pk.tier.toUpperCase() + ' ' + pk.type.toUpperCase(), this.player.group.position.clone().setY(3.5), '#' + pk.col.toString(16).padStart(6, '0'));
   }
   _finisher() {
     if (!this.state.running || this.player.dying) return;
     const st = this.spec.fighters.player.stats, P = this.player.group.position;
+    const rampaging = this.state.rageT > 0, weapon = this.state.weapon;
+    const rip = rampaging || !!weapon;
+    const thr = rampaging ? 0.45 : (weapon ? 0.3 : (this.spec.combat.finisherThreshold ?? 0.16)); // easier to RIP
     let target = null, best = Infinity;
-    for (const e of this.state.enemies) { if (e.dying) continue; if (e.hp / e.maxHp > (this.spec.combat.finisherThreshold ?? 0.16)) continue; const dd = e.group.position.distanceTo(P); if (dd < st.reach * 1.7 && dd < best) { best = dd; target = e; } }
+    for (const e of this.state.enemies) { if (e.dying) continue; if (e.hp / e.maxHp > thr) continue; const dd = e.group.position.distanceTo(P); if (dd < st.reach * 1.8 && dd < best) { best = dd; target = e; } }
     if (!target) return;
-    this._addCombo(this.spec.combat.pointsFinisher ?? 70);
-    this.state.hitPause = 0.5; this.state.slowmo = 0.95; this.state.flash = 0.22; this._shake(0.26, 0.55);
-    this.audio.finisher(); this.audio.duck(700); this.audio.chirp(1.25);
+    this._addCombo(this.spec.combat.pointsFinisher ?? 70); this._addRage(0.18);
+    this.state.hitPause = 0.5; this.state.slowmo = 0.95; this.state.flash = rip ? 0.3 : 0.22; this._shake(rip ? 0.4 : 0.26, rip ? 0.65 : 0.55);
+    this.audio.finisher(); this.audio.duck(800); this.audio.chirp(1.25);
     this._camFinisher(target.group.position.clone());
     const dir = P.clone().sub(target.group.position).setY(0).normalize();
-    this._kill(target, dir, true);
-    this.emit('banner', 'FRUITALITY', '+70 STYLE');
+    // signature finisher label per fighter; weapon name when armed
+    const label = weapon ? (weapon.type === 'mixer' ? 'BLENDED!' : 'SLICED!') : (this.spec.fighters.player.finisher || 'FRUITALITY!');
+    this._kill(target, dir, true, { rip, weapon, label });
+    this.emit('banner', weapon ? weapon.type.toUpperCase() + ' KILL' : (rampaging ? 'RIP!' : 'FRUITALITY'), weapon ? weapon.tier.toUpperCase() : '+70 STYLE');
+    if (weapon) { this.state.weapon = null; this.emit('weapon', null); }
   }
   _hurtPlayer(dmg, dir) {
     if (this.player.iFrame > 0 || this.player.dying) return;
@@ -670,6 +759,33 @@ export class Orchard {
 
     // combo decay
     const c = this.state.combo; if (c.points > 0 && this.state.t - c.last > 1.2) { c.points = Math.max(0, c.points - 10 * dt); this._refreshRank(); }
+
+    // RAMPAGE timer + red player glow
+    if (this.state.rageT > 0) {
+      this.state.rageT -= raw;
+      const mats = this.player.bodyMats || (this.player.head && this.player.head.material ? [this.player.head.material] : []);
+      const gl = 0.35 + 0.28 * Math.sin(this.state.t * 14);
+      mats.forEach(m => { if (m.emissive) { m.emissive.setHex(0xff2a2a); m.emissiveIntensity = gl; } });
+      if (this.state.rageT <= 0) { mats.forEach(m => { if (m.emissive) m.emissiveIntensity = 0; }); this.emit('rage', 0, 0); }
+      else if (Math.random() < 0.2) this.emit('rage', this.state.rage, Math.max(0, this.state.rageT));
+    }
+    // juice fountains (sustained emitters)
+    for (const ft of this.state.fountains) {
+      ft.t -= dt; const col = new THREE.Color(ft.col);
+      for (let i = 0, n = Math.max(1, Math.round(ft.rate)); i < n; i++) {
+        const a = Math.random() * Math.PI * 2, sp = rand(0.3, 1.0) * 3;
+        this.state.parts.push({ p: ft.pos.clone().add(new THREE.Vector3(rand(-.2, .2), 0, rand(-.2, .2))), v: new THREE.Vector3(Math.cos(a) * sp, rand(9, 15), Math.sin(a) * sp), g: 22, life: rand(0.5, 1.1), max: 1, col, size: rand(0.35, 0.7) });
+        const pt = this.state.parts[this.state.parts.length - 1]; pt.max = pt.life;
+      }
+    }
+    this.state.fountains = this.state.fountains.filter(ft => ft.t > 0);
+    // weapon pickups: float, spin, collect on overlap
+    for (const pk of this.state.pickups) {
+      pk.t -= dt; pk.mesh.rotation.y += dt * 2.2; pk.mesh.position.y = pk.baseY + Math.sin(this.state.t * 3 + pk.ph) * 0.25;
+      if (!this.player.dying && pk.mesh.position.distanceTo(this.player.group.position) < 2.0) { this._grabWeapon(pk); pk.t = -1; }
+    }
+    for (const pk of this.state.pickups) if (pk.t <= 0) this.scene.remove(pk.mesh);
+    this.state.pickups = this.state.pickups.filter(pk => pk.t > 0);
 
     // particles
     for (const p of this.state.parts) { p.p.addScaledVector(p.v, dt); p.v.y -= p.g * dt; p.v.multiplyScalar(Math.pow(0.4, dt)); p.life -= dt; }
