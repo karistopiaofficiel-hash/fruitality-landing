@@ -511,6 +511,7 @@ export class Orchard {
     if (this.player.atkCd > 0) return;
     const st = this.spec.fighters.player.stats;
     this.player.atkCd = st.attackCd; this.player.swing = 0.22; this.player.state = 'attack';
+    this.player.atkSide = ((this.player.atkSide || 0) + 1) % 2; // alternate L/R for a combo feel
     this.player.play('punch', 0.05); this.player.atkAnim = 1; this.audio.swing();
   }
   // Procedural attack for sculpted models (no skeleton): windup back -> thrust
@@ -521,11 +522,15 @@ export class Orchard {
     let lunge, pitch, stretch;
     if (u < 0.28) { const w = u / 0.28; lunge = -0.28 * w; pitch = 0.22 * w; stretch = -0.09 * w; }        // windup back (anticipation)
     else { const s = (u - 0.28) / 0.72, e = 1 - Math.pow(1 - s, 4); lunge = lerp(-0.28, 1.35, e); pitch = lerp(0.22, -0.62, e); stretch = lerp(-0.09, 0.22, e); if (s > 0.55) { const r = (s - 0.55) / 0.45; lunge *= 1 - r * 0.88; pitch *= 1 - r; stretch *= 1 - r; } } // snap forward + recover
+    const side = rig.atkSide ? 1 : -1;      // alternating hook direction
     rig.head.position.z = lunge * 0.8;      // thrust along facing (group is yawed to face)
+    rig.head.position.x = side * Math.max(0, lunge) * 0.35; // diagonal hook step
     rig.head.position.y = (rig._footY || 0) + Math.max(0, lunge) * 0.18; // slight rise on the slam
     rig.head.rotation.x = pitch;            // chomp/headbutt pitch
+    rig.head.rotation.z = side * Math.max(0, stretch) * 0.7; // roll into the hook
+    rig.head.rotation.y = side * Math.max(0, lunge) * 0.3;   // twist into the swing
     const b = rig.bodyBaseScale; rig.head.scale.set(b.x * (1 - stretch * 0.45), b.y * (1 - stretch * 0.45), b.z * (1 + stretch));
-    if (rig.atkAnim <= 0) { rig.atkAnim = 0; rig.head.position.z = 0; rig.head.rotation.x = 0; rig.head.position.y = (rig._footY || 0); }
+    if (rig.atkAnim <= 0) { rig.atkAnim = 0; rig.head.position.set(0, rig._footY || 0, 0); rig.head.rotation.set(0, 0, 0); }
   }
   _resolveSwing() {
     if (this.player._swingDone) return; this.player._swingDone = true;
@@ -826,7 +831,7 @@ export class Orchard {
       if (e.isModel && (e.atkAnim || 0) > 0) this._attackAnim(e, dt);
       else this._applyGait(e, dt, clamp(e.vel.length() / def.speed, 0, 1.2));
       e.atkCd -= dt;
-      if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); e.atkAnim = 1; setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
+      if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); e.atkAnim = 1; e.atkSide = ((e.atkSide || 0) + 1) % 2; setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
       if (e.mixer) e.mixer.update(dt);
     }
     // remove finished-dying enemies
