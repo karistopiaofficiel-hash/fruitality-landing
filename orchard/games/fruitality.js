@@ -3,8 +3,8 @@
 export const fruitality = {
   title: 'FRUITALITY',
   assets: {
-    character: '../assets/character.glb',
-    hdri: '../assets/env.hdr',
+    character: 'assets/character.glb',
+    hdri: 'assets/env.hdr',
   },
   arena: {
     radius: 24,

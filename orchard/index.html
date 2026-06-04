@@ -120,8 +120,9 @@ async function boot() {
   window.__G = game;
   wireHud(game);
   game.on('ready', () => { $('loading').style.display = 'none'; $('start').classList.remove('hidden'); });
+  game.on('loaderror', (msg) => { $('loading').innerHTML = `<div style="max-width:340px;text-align:center;color:#f9d43a"><div style="font-size:2rem">🍉💔</div><p style="color:#fff;margin:.8rem 0">${msg}</p><p style="color:#b8b8c4;font-size:.85rem">Reload to retry.</p></div>`; });
   // engine starts on Play to satisfy audio autoplay; preload now
-  await game.start();
+  try { await game.start(); } catch (e) { console.error(e); }
 }
 $('play').onclick = () => $('start').classList.add('hidden');
 $('again').onclick = () => location.reload();

@@ -172,7 +172,13 @@ export class Orchard {
   async _loadAssets() {
     const pm = new THREE.PMREMGenerator(this.renderer); pm.compileEquirectangularShader();
     await new Promise((res) => new RGBELoader().load(this.spec.assets.hdri, (tex) => { tex.mapping = THREE.EquirectangularReflectionMapping; this.scene.environment = pm.fromEquirectangular(tex).texture; tex.dispose(); res(); }, undefined, () => res()));
-    this.gltf = await new Promise((res) => new GLTFLoader().load(this.spec.assets.character, (g) => { g.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } }); res(g); }, undefined, () => res(null)));
+    this.gltf = await new Promise((res) => new GLTFLoader().load(this.spec.assets.character, (g) => { g.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } }); res(g); }, undefined, (err) => { console.error('[Orchard] character GLB failed to load:', this.spec.assets.character, err); res(null); }));
+    if (!this.gltf || !this.gltf.scene) {
+      const msg = `Could not load the character model (${this.spec.assets.character}). Check the asset path.`;
+      console.error('[Orchard]', msg);
+      this.emit('loaderror', msg);
+      throw new Error(msg);
+    }
   }
 
   _makeFighter(def, isPlayer) {
