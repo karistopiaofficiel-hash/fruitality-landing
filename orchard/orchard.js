@@ -563,19 +563,24 @@ export class Orchard {
       // silhouette and reads even when attacking away from the follow-cam.
       q: new THREE.RingGeometry(1.5, 2.7, 40, 1, -0.85, 1.7),
       h: new THREE.RingGeometry(1.9, 3.6, 48, 1, -1.0, 2.0),
+      qe: new THREE.RingGeometry(2.45, 2.8, 40, 1, -0.85, 1.7),  // thin white-hot leading edge
+      he: new THREE.RingGeometry(3.25, 3.65, 48, 1, -1.0, 2.0),
     };
-    const base = new THREE.Color(this.spec.fighters.player.juice).lerp(new THREE.Color(0xffffff), 0.35);
-    const m = new THREE.Mesh(heavy ? this._slashGeo.h : this._slashGeo.q,
-      new THREE.MeshBasicMaterial({ color: base, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false, depthTest: false }));
-    m.renderOrder = 999;                                         // draw ON TOP — never occluded by the body
-    m.rotation.x = -Math.PI / 2;                                 // lie flat (reads from the high follow-cam)
-    m.position.copy(rig.group.position); m.position.y = 2.0;     // ride above the body so the sweep is unmistakable
-    this.scene.add(m);
-    const f = rig.facing;
-    const aim = Math.atan2(f.x, f.z);                             // open the crescent toward the facing
-    const side = rig.atkSide ? 1 : -1;
-    this.state.slashes.push({ m, t: 0, dur: heavy ? 0.26 : 0.17, side, rot0: aim - side * 0.7 });
-    m.rotation.z = aim - side * 0.7;                              // start wound-up, sweeps across
+    const juice = new THREE.Color(this.spec.fighters.player.juice);
+    const f = rig.facing, aim = Math.atan2(f.x, f.z), side = rig.atkSide ? 1 : -1;
+    // two layers: a juice-colored body (bloody) + a white-hot leading edge (sharp)
+    const mk = (geo, col, op, ro) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false, depthTest: false }));
+      m.renderOrder = ro; m.rotation.x = -Math.PI / 2; m.position.copy(rig.group.position); m.position.y = 2.0;
+      m.rotation.z = aim - side * 0.7; this.scene.add(m); return m;
+    };
+    const body = mk(heavy ? this._slashGeo.h : this._slashGeo.q, juice.clone().lerp(new THREE.Color(0xffffff), 0.12), 0.95, 999);
+    const edge = mk(heavy ? this._slashGeo.he : this._slashGeo.qe, new THREE.Color(0xffffff).lerp(juice, 0.25), 1.0, 1000);
+    this.state.slashes.push({ m: body, m2: edge, t: 0, dur: heavy ? 0.24 : 0.16, side, rot0: aim - side * 0.7 });
+    // forward juice streak + a quick screen pop so the swing has impact even on a whiff
+    const o = rig.group.position.clone().setY(1.4).addScaledVector(f, 1.2);
+    for (let i = 0; i < (heavy ? 14 : 8); i++) { const a = (i / (heavy ? 14 : 8) - 0.5) * 0.8; const d = f.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a); this.state.parts.push({ p: o.clone(), v: d.multiplyScalar(rand(9, 15)).setY(rand(-1.5, 2.5)), g: 10, life: rand(0.12, 0.26), max: 0.26, col: juice.clone(), size: heavy ? 0.5 : 0.34 }); }
+    this.state.flash = Math.max(this.state.flash, heavy ? 0.16 : 0.09);
   }
   // Procedural attack for sculpted models (no skeleton): windup back -> thrust
   // forward + chomp-pitch + stretch. Reads as a body-slam/headbutt strike.
@@ -1060,13 +1065,13 @@ export class Orchard {
       if (this.state.rageT <= 0) { const be = this.player.baseEmi || 0; mats.forEach(m => { if (m.emissive) { m.emissive.setHex(this.player.def.juice); m.emissiveIntensity = be; } }); this.emit('rage', 0, 0); }
       else if (Math.random() < 0.2) this.emit('rage', this.state.rage, Math.max(0, this.state.rageT));
     }
-    // attack slash arcs: sweep, expand, fade, then retire
+    // attack slash arcs: sweep, expand, fade, then retire (two layers: body + hot edge)
     for (const s of this.state.slashes) {
       s.t += dt; const u = clamp(s.t / s.dur, 0, 1);
-      s.m.material.opacity = 0.95 * (1 - u * u);
-      s.m.scale.setScalar(0.8 + u * 0.7);
-      s.m.rotation.z = s.rot0 + s.side * (0.5 + u * 1.1); // sweep through the arc
-      if (u >= 1) this.scene.remove(s.m);
+      const rot = s.rot0 + s.side * (0.5 + u * 1.25), sc = 0.8 + u * 0.7;
+      s.m.material.opacity = 0.95 * (1 - u * u); s.m.scale.setScalar(sc); s.m.rotation.z = rot;
+      if (s.m2) { s.m2.material.opacity = 1 - u; s.m2.scale.setScalar(sc); s.m2.rotation.z = rot; }
+      if (u >= 1) { this.scene.remove(s.m); if (s.m2) this.scene.remove(s.m2); }
     }
     if (this.state.slashes.length) this.state.slashes = this.state.slashes.filter(s => s.t < s.dur);
     // juice fountains (sustained emitters)
