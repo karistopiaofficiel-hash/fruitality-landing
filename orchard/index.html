@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#0b0b10" />
+<title>FRUITALITY — Orchard build</title>
+<style>
+  :root{--ink:#fff;--dim:#b8b8c4;--melon:#e13c5a;--banana:#f9d43a;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:#06060a;color:var(--ink);font-family:Inter,-apple-system,system-ui,sans-serif;overflow:hidden;touch-action:none;}
+  canvas#g{display:block;position:fixed;inset:0;}
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10;}
+  .top{position:absolute;top:0;left:0;right:0;padding:.8rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;text-shadow:0 2px 6px #000;}
+  .hpwrap{flex:1 1 240px;max-width:320px;}
+  .lbl{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:4px;}
+  .bar{height:14px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);overflow:hidden;}
+  .fill{height:100%;border-radius:99px;background:var(--melon);box-shadow:0 0 12px var(--melon);transition:width .15s;}
+  .mid{text-align:center;min-width:140px;}
+  .rank{font-weight:900;font-size:clamp(1.4rem,4vw,2.1rem);color:var(--banana);line-height:1;}
+  .pts{font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-top:3px;}
+  .right{text-align:right;flex:1 1 200px;}
+  #banner{position:absolute;top:46%;left:50%;transform:translate(-50%,-50%) scale(.8);opacity:0;font-weight:900;font-size:clamp(2.4rem,9vw,5rem);color:var(--melon);text-shadow:0 4px 30px rgba(225,60,90,.6),0 4px 12px #000;text-align:center;transition:opacity .25s,transform .35s cubic-bezier(.16,1.4,.43,1);}
+  #banner.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+  #banner small{display:block;font-size:.34em;letter-spacing:.2em;color:var(--dim);margin-top:.3em;}
+  .overlay{position:fixed;inset:0;z-index:30;background:rgba(7,7,12,.92);backdrop-filter:blur(8px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem 1rem;transition:opacity .3s;}
+  .overlay.hidden{opacity:0;pointer-events:none;}
+  .overlay h1{font-size:clamp(2.6rem,9vw,5rem);margin:0;font-weight:900;color:var(--melon);text-shadow:0 4px 30px rgba(0,0,0,.7);letter-spacing:-.03em;}
+  .overlay p{color:var(--dim);max-width:460px;margin:.6rem 0 1.6rem;line-height:1.5;}
+  .overlay .controls{display:grid;grid-template-columns:auto 1fr;gap:.3rem 1rem;text-align:left;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1.6rem;font-size:.9rem;}
+  .overlay kbd{font-family:ui-monospace,monospace;font-size:.82rem;padding:2px 6px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:6px;}
+  .btn{padding:1rem 1.9rem;border:none;border-radius:14px;background:var(--melon);color:#fff;font-weight:800;font-size:1.05rem;cursor:pointer;box-shadow:0 12px 28px -10px rgba(225,60,90,.7);}
+  .badge{display:inline-block;padding:.3rem .85rem;border:1px solid rgba(255,255,255,.18);border-radius:99px;color:var(--dim);font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:1.1rem;}
+  #loading{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;gap:1rem;align-items:center;justify-content:center;background:#06060a;}
+  .spin{width:46px;height:46px;border-radius:50%;border:4px solid rgba(255,255,255,.1);border-top-color:var(--melon);animation:s 1s linear infinite;}
+  @keyframes s{to{transform:rotate(360deg);}}
+  .float{position:fixed;z-index:11;font-weight:900;font-size:1rem;pointer-events:none;transform:translate(-50%,-50%);text-shadow:0 2px 4px #000;}
+  /* touch */
+  .touch{position:fixed;inset:0;z-index:12;pointer-events:none;display:none;}
+  @media(pointer:coarse){.touch{display:block;}}
+  #stick{position:absolute;left:1.4rem;bottom:1.4rem;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.14);pointer-events:auto;}
+  #nub{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(225,60,90,.55);border:2px solid rgba(255,255,255,.5);}
+  #atk{position:absolute;right:1.4rem;bottom:1.4rem;width:94px;height:94px;border-radius:50%;background:rgba(249,212,58,.6);border:3px solid rgba(255,255,255,.7);color:#fff;font-size:1.5rem;font-weight:900;pointer-events:auto;}
+  #fin{position:absolute;right:1.6rem;bottom:150px;width:78px;height:78px;border-radius:50%;background:rgba(225,60,90,.7);border:3px solid rgba(255,255,255,.7);color:#fff;font-size:.95rem;font-weight:900;pointer-events:auto;opacity:.5;}
+  a.back{position:fixed;top:.7rem;right:.7rem;z-index:13;color:var(--dim);text-decoration:none;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:.4rem .7rem;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.12);border-radius:8px;}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<a class="back" href="/">← back</a>
+<canvas id="g"></canvas>
+<div id="hud">
+  <div class="top">
+    <div class="hpwrap"><div class="lbl">🍉 Wrecking Melon</div><div class="bar"><div id="hp" class="fill" style="width:100%"></div></div></div>
+    <div class="mid"><div id="rank" class="rank">—</div><div class="pts"><span id="pts">0</span> pts</div></div>
+    <div class="right"><div class="lbl">Wave <span id="wave">1</span>/3 · <span id="count">0</span> left</div></div>
+  </div>
+</div>
+<div id="banner"></div>
+<div class="touch">
+  <div id="stick"><div id="nub"></div></div>
+  <button id="atk">⚔</button>
+  <button id="fin">FRUI</button>
+</div>
+<div id="start" class="overlay hidden">
+  <span class="badge">Orchard engine · web 3D</span>
+  <h1>FRUITALITY</h1>
+  <p>Rigged fruit warriors, juicy melee, cinematic finishers — running in your browser. Built on the Orchard web-game engine.</p>
+  <div class="controls"><kbd>WASD</kbd><span>Move</span><kbd>Space / Click</kbd><span>Attack</span><kbd>F</kbd><span>Fruitality finisher</span><kbd>R</kbd><span>Restart</span></div>
+  <button class="btn" id="play">▶ Enter the orchard</button>
+</div>
+<div id="end" class="overlay hidden">
+  <span class="badge">Run complete</span>
+  <h1 id="endt">JUICED.</h1>
+  <p id="endm"></p>
+  <button class="btn" id="again">▶ Run it back</button>
+</div>
+<div id="loading"><div class="spin"></div><div style="color:#b8b8c4;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase">Loading orchard…</div></div>
+
+<script type="module">
+import { Orchard } from './orchard.js';
+import { fruitality } from './games/fruitality.js';
+
+const $ = id => document.getElementById(id);
+let game;
+
+function wireHud(g) {
+  g.on('hp', v => $('hp').style.width = (v * 100) + '%');
+  g.on('rank', r => { const el = $('rank'); el.textContent = r === 'None' ? '—' : r; el.style.color = r === 'JUICEMASTER' ? '#e13c5a' : (['S', 'SS'].includes(r) ? '#ffce4d' : '#f9d43a'); });
+  g.on('points', p => $('pts').textContent = p);
+  g.on('wave', (w) => $('wave').textContent = w);
+  g.on('count', c => $('count').textContent = c);
+  g.on('banner', (t, s) => { const b = $('banner'); b.innerHTML = t + (s ? `<small>${s}</small>` : ''); b.classList.add('show'); clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), 1500); });
+  g.on('restart', () => location.reload());
+  g.on('end', (r) => { $('endt').textContent = r.won ? 'JUICED.' : 'YOU GOT PEELED.'; $('endm').textContent = `${r.won ? 'All waves cleared.' : 'The fruit got you.'}  Rank ${r.rank === 'None' ? 'D' : r.rank} · ${r.score} pts · ${r.finishers} Fruitalities`; $('end').classList.remove('hidden'); });
+  // floaters
+  g.on('floaters', (list, cam) => {
+    let pool = wireHud._pool || (wireHud._pool = []);
+    while (pool.length < list.length) { const d = document.createElement('div'); d.className = 'float'; document.body.appendChild(d); pool.push(d); }
+    for (let i = 0; i < pool.length; i++) {
+      const el = pool[i], f = list[i];
+      if (!f) { el.style.display = 'none'; continue; }
+      const v = f.pos.clone().project(cam);
+      if (v.z > 1) { el.style.display = 'none'; continue; }
+      el.style.display = 'block'; el.textContent = f.text; el.style.color = f.color;
+      el.style.opacity = Math.min(1, f.life * 2);
+      el.style.left = ((v.x * .5 + .5) * innerWidth) + 'px';
+      el.style.top = ((-v.y * .5 + .5) * innerHeight) + 'px';
+    }
+  });
+}
+
+async function boot() {
+  game = new Orchard($('g'), fruitality);
+  window.__G = game;
+  wireHud(game);
+  game.on('ready', () => { $('loading').style.display = 'none'; $('start').classList.remove('hidden'); });
+  // engine starts on Play to satisfy audio autoplay; preload now
+  await game.start();
+}
+$('play').onclick = () => $('start').classList.add('hidden');
+$('again').onclick = () => location.reload();
+// touch wiring
+(function () {
+  const stick = $('stick'), nub = $('nub'); let id = null; const R = 65;
+  const set = (dx, dy) => { nub.style.transform = `translate(${dx}px,${dy}px)`; const m = Math.hypot(dx, dy); const s = Math.min(1, m / R); const nx = m ? dx / m : 0, ny = m ? dy / m : 0; game && game.setStick(nx * s, -ny * s); };
+  stick.addEventListener('touchstart', e => { id = e.changedTouches[0].identifier; e.preventDefault(); }, { passive: false });
+  stick.addEventListener('touchmove', e => { for (const t of e.changedTouches) if (t.identifier === id) { const r = stick.getBoundingClientRect(); let dx = t.clientX - (r.left + r.width / 2), dy = t.clientY - (r.top + r.height / 2); const m = Math.hypot(dx, dy); if (m > R) { dx = dx / m * R; dy = dy / m * R; } set(dx, dy); } e.preventDefault(); }, { passive: false });
+  const end = e => { for (const t of e.changedTouches) if (t.identifier === id) { id = null; set(0, 0); } };
+  stick.addEventListener('touchend', end); stick.addEventListener('touchcancel', end);
+  $('atk').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnAttack(); }, { passive: false });
+  $('fin').addEventListener('touchstart', e => { e.preventDefault(); game && game.btnFinisher(); }, { passive: false });
+})();
+boot();
+</script>
+</body>
+</html>
