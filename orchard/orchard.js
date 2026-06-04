@@ -255,6 +255,16 @@ export class Orchard {
       this.emit('loaderror', msg);
       throw new Error(msg);
     }
+    // preload any per-fighter sculpted GLB models (TRELLIS-generated) so _makeFighter can clone them synchronously
+    this.models = {};
+    const F = this.spec.fighters;
+    const paths = new Set();
+    const collect = (d) => { if (d && d.model) paths.add(d.model); };
+    collect(F.player); (F.roster || []).forEach(collect); Object.values(F.enemies || {}).forEach(collect);
+    for (const p of paths) {
+      const g = await new Promise((res) => new GLTFLoader().load(p, (gl) => { gl.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } }); res(gl); }, undefined, (err) => { console.warn('[Orchard] model failed to load:', p, err); res(null); }));
+      if (g && g.scene) this.models[p] = g.scene;
+    }
   }
 
   // Procedural imperfect/spoiled fruit skin: equirectangular CanvasTexture with
@@ -288,6 +298,7 @@ export class Orchard {
 
   _makeFighter(def, isPlayer) {
     const rig = { def, isPlayer, hp: def.stats.hp, maxHp: def.stats.hp, state: 'idle', dying: 0, atkCd: 0, flash: 0 };
+    if (def.model && this.models && this.models[def.model]) return this._makeModelFighter(rig, def, isPlayer);
     rig.group = SkeletonUtils.clone(this.gltf.scene);
     rig.group.scale.setScalar(isPlayer ? 1.25 : (def.scale ?? 0.95));
     // tint body + add fruit head
@@ -354,6 +365,37 @@ export class Orchard {
     rig.play = (name, fade = 0.18) => { const nx = rig.actions[name]; if (!nx || rig.cur === nx) return; nx.reset().play(); nx.setEffectiveWeight(1); if (rig.cur) rig.cur.crossFadeTo(nx, fade, false); rig.cur = nx; rig.curName = name; };
     rig.play('idle');
     return rig;
+  }
+
+  // Sculpted-model fighter: a TRELLIS-generated textured GLB driven entirely by
+  // the procedural gait (no skeleton needed — chunky fruit have barely any limbs).
+  _makeModelFighter(rig, def, isPlayer) {
+    rig.isModel = true;
+    rig.group = new THREE.Group();
+    const m = this.models[def.model].clone(true);
+    // per-instance materials (so hit-flash emissive doesn't bleed across clones)
+    const tint = new THREE.Color(def.juice); rig.bodyMats = [];
+    m.traverse(n => { if (n.isMesh) { n.material = n.material.clone(); n.material.emissive = tint.clone().multiplyScalar(0.0); n.castShadow = true; n.receiveShadow = true; rig.bodyMats.push(n.material); } });
+    // scale the (height-1) model to world height, feet on the ground
+    const H = (isPlayer ? 3.4 : 3.4 * (def.scale ?? 0.95));
+    m.scale.setScalar(H);
+    const box = new THREE.Box3().setFromObject(m); m.position.y = -box.min.y;
+    rig.group.add(m); rig.head = m; rig.bodyBaseScale = m.scale.clone();
+    // gait personality + jelly-wobble spring
+    const G = def.gait || {};
+    rig.gait = { bob: G.bob ?? 0.12, hop: G.hop ?? 0.13, waddle: G.waddle ?? 0.12, squash: G.squash ?? 0.15, lean: G.lean ?? 0.09, freq: G.freq ?? 9, wobble: G.wobble ?? 0.4, stomp: G.stomp ?? 0.6 };
+    rig.gaitPhase = Math.random() * Math.PI * 2; rig.wob = 0; rig.wobV = 0; rig._lastSin = 0;
+    rig.voicePitch = isPlayer ? 1.0 : clamp(1.55 - (def.scale ?? 0.95) * 0.42, 0.55, 1.6) * (0.92 + Math.random() * 0.16);
+    rig.mixer = null; // no skeletal animation
+    rig.play = (name) => { rig.curName = name; if (name === 'punch') rig.wobV += 0.9; }; // punch = effort squash
+    return rig;
+  }
+  // procedural death for sculpted models (no skeletal 'death' clip): topple + sink + shrink
+  _toppleModel(rig, dt) {
+    if (!rig.head) return;
+    rig.head.rotation.z = Math.min((rig.head.rotation.z || 0) + dt * 3.2, Math.PI * 0.5);
+    rig.head.position.y = Math.max(0, rig.head.position.y - dt * 0.7);
+    if (rig.dying < 0.6) { const sc = Math.max(0.01, rig.dying / 0.6); rig.head.scale.setScalar(rig.bodyBaseScale.x * sc); }
   }
 
   // Procedural "Fall Guys" gait layered on top of the skeletal walk: bob/hop,
@@ -592,13 +634,14 @@ export class Orchard {
       P.group.lookAt(P.group.position.clone().add(P.facing));
       this._applyGait(P, dt, P.dashT > 0 ? 1.4 : (moving ? 1 : 0));
     }
-    P.mixer.update(dt);
+    if (P.mixer) P.mixer.update(dt);
 
     // enemies
     for (const e of this.state.enemies) {
       e.flash = Math.max(0, e.flash - dt);
-      if (e.head) e.head.material.emissiveIntensity = e.flash * 3;
-      if (e.dying) { e.dying -= dt; e.mixer.update(dt); continue; }
+      if (e.bodyMats) e.bodyMats.forEach(mt => mt.emissiveIntensity = e.flash * 3);
+      else if (e.head && e.head.material) e.head.material.emissiveIntensity = e.flash * 3;
+      if (e.dying) { e.dying -= dt; if (e.mixer) e.mixer.update(dt); else this._toppleModel(e, dt); continue; }
       e.vel.multiplyScalar(Math.pow(0.001, dt));
       const to = P.group.position.clone().sub(e.group.position); to.y = 0; const dist = to.length();
       const def = e.def.stats;
@@ -611,7 +654,7 @@ export class Orchard {
       this._applyGait(e, dt, clamp(e.vel.length() / def.speed, 0, 1.2));
       e.atkCd -= dt;
       if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
-      e.mixer.update(dt);
+      if (e.mixer) e.mixer.update(dt);
     }
     // remove finished-dying enemies
     for (const e of this.state.enemies) if (e.dying < 0) this.scene.remove(e.group);

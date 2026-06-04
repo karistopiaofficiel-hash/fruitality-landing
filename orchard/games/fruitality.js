@@ -23,13 +23,14 @@ export const fruitality = {
       name: 'Wrecking Melon', juice: 0xe13c5a,
       stripes: true, stripeColor: 0x0c4f1c,
       finisher: 'JUICED!',
+      model: 'assets/models/watermelon.glb', // TRELLIS-generated sculpted fruit warrior
       gait: { hop: 0.20, waddle: 0.12, squash: 0.22, freq: 9, wobble: 0.55 },
       stats: { hp: 220, speed: 7.0, attackCd: 0.32, reach: 3.6, damage: 20 },
     },
     // playable roster (fighter-select). roster[0] === default player.
     roster: [
       { name: 'Wrecking Melon', juice: 0xe13c5a, stripes: true, stripeColor: 0x0c4f1c, finisher: 'JUICED!',
-        tag: 'All-rounder', gait: { hop: 0.20, waddle: 0.12, squash: 0.22, freq: 9, wobble: 0.55 },
+        tag: 'All-rounder', model: 'assets/models/watermelon.glb', gait: { hop: 0.20, waddle: 0.12, squash: 0.22, freq: 9, wobble: 0.55 },
         stats: { hp: 220, speed: 7.0, attackCd: 0.32, reach: 3.6, damage: 20 } },
       { name: 'Pineapple Punisher', juice: 0xf0a81e, finisher: 'PULPED!',
         tag: 'Heavy hitter', gait: { hop: 0.08, waddle: 0.05, squash: 0.08, freq: 8, lean: 0.05, wobble: 0.18 },
