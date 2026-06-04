@@ -32,7 +32,7 @@ export class Orchard {
       running: false, finished: false, won: false, t: 0,
       hitPause: 0, slowmo: 0, flash: 0,
       shake: { mag: 0, t: 0 },
-      wave: 0, enemies: [], parts: [], floaters: [], waveActive: false, toSpawn: 0,
+      wave: 0, enemies: [], parts: [], gibs: [], puddles: [], floaters: [], waveActive: false, toSpawn: 0,
       combo: { points: 0, rank: 'None', last: -10 },
       finishers: 0,
     };
@@ -156,6 +156,62 @@ export class Orchard {
       vertexColors: true, transparent: true, depthWrite: false, blending: THREE.NormalBlending,
     });
     this.points = new THREE.Points(g, m); this.scene.add(this.points);
+    // gore meshes: reusable chunk geometries (ripped-off body parts) + head + floor puddle
+    this._gibGeo = [
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.BoxGeometry(1, 0.5, 0.7),
+      new THREE.TetrahedronGeometry(0.8),
+      new THREE.IcosahedronGeometry(0.7, 0),
+      new THREE.CylinderGeometry(0.45, 0.55, 1.1, 6),
+    ];
+    this._headGibGeo = new THREE.SphereGeometry(1, 16, 16);
+    this._puddleGeo = new THREE.CircleGeometry(1, 24);
+  }
+
+  // ---------------------------------------------------------------- gore: gibs + puddles
+  // Dismemberment chunks: real meshes flung with velocity/spin/gravity that
+  // bounce on the floor and fade. This is the "body parts ripped out" read.
+  _gib(origin, hex, count, power, big) {
+    const col = new THREE.Color(hex);
+    for (let i = 0; i < count; i++) {
+      const sz = rand(big ? 0.18 : 0.12, big ? 0.44 : 0.28);
+      const geo = this._gibGeo[Math.floor(Math.random() * this._gibGeo.length)];
+      const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0, emissive: col.clone().multiplyScalar(0.12) });
+      const m = new THREE.Mesh(geo, mat);
+      m.scale.setScalar(sz);
+      m.position.copy(origin).add(new THREE.Vector3(rand(-.3, .3), rand(-.2, .5), rand(-.3, .3)));
+      m.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6)); m.castShadow = true;
+      this.scene.add(m);
+      const ph = Math.random() * Math.PI * 2;
+      const v = new THREE.Vector3(Math.cos(ph), 0, Math.sin(ph)).multiplyScalar(power * rand(.5, 1.2));
+      v.y = rand(3, 7) + (big ? 2 : 0);
+      const av = new THREE.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9));
+      this.state.gibs.push({ mesh: m, v, av, life: rand(2.6, 4.4), max: 4.4, size: sz, rest: false });
+    }
+    while (this.state.gibs.length > 150) { const g = this.state.gibs.shift(); this.scene.remove(g.mesh); }
+  }
+  // The fruit head pops clean off and rolls — the signature finisher gore beat.
+  _popHead(e) {
+    const wp = new THREE.Vector3(); (e.head || e.group).getWorldPosition(wp);
+    const col = new THREE.Color(e.def.juice);
+    const m = new THREE.Mesh(this._headGibGeo, new THREE.MeshStandardMaterial({ color: col, roughness: .45, metalness: 0, emissive: col.clone().multiplyScalar(.12) }));
+    const sz = 0.34 * (e.def.scale ?? 1);
+    m.scale.setScalar(sz); m.position.copy(wp); m.castShadow = true; this.scene.add(m);
+    const ph = Math.random() * Math.PI * 2;
+    const v = new THREE.Vector3(Math.cos(ph) * rand(2.5, 5), rand(6, 9), Math.sin(ph) * rand(2.5, 5));
+    const av = new THREE.Vector3(rand(-7, 7), rand(-7, 7), rand(-7, 7));
+    this.state.gibs.push({ mesh: m, v, av, life: rand(4, 5.5), max: 5.5, size: sz, rest: false });
+  }
+  // Juice splatter that stains the arena floor — the aftermath read.
+  _puddle(pos, hex, r) {
+    const col = new THREE.Color(hex);
+    const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false });
+    const m = new THREE.Mesh(this._puddleGeo, mat);
+    m.rotation.x = -Math.PI / 2; m.rotation.z = rand(0, 6);
+    m.position.set(pos.x, 0.025 + Math.random() * 0.01, pos.z); m.scale.setScalar(0.2 * r);
+    this.scene.add(m);
+    this.state.puddles.push({ mesh: m, target: r * rand(.9, 1.3), life: 9, max: 9, op: rand(.4, .6) });
+    while (this.state.puddles.length > 28) { const p = this.state.puddles.shift(); this.scene.remove(p.mesh); }
   }
   _dotTex() { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.4, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); }
   juice(origin, hex, count = 18, speed = 8, life = 0.9, size = 0.7, grav = 12) {
@@ -292,9 +348,17 @@ export class Orchard {
   _kill(e, dir, finisher) {
     e.dying = finisher ? 0.1 : 1.4; e.state = 'dead'; e.play('death', 0.08);
     const o = e.group.position.clone().setY(1.2);
-    // GORE: juice geyser + chunks in the victim's color (normal-blended = reads as juice, not light)
+    // GORE: juice geyser in the victim's color (normal-blended = reads as juice, not light)
     this.juice(o, e.def.juice, finisher ? 90 : 38, finisher ? 16 : 11, 1.5, finisher ? 0.6 : 0.5, finisher ? 10 : 13);
     this.juice(o, 0xfff4d0, 8, 5, 0.6, 0.32);
+    // GORE: dismemberment chunks fly off + juice stains the floor
+    this._gib(o, e.def.juice, finisher ? 16 : 6, finisher ? 12 : 7, finisher);
+    this._puddle(e.group.position.clone(), e.def.juice, finisher ? 2.6 : 1.5);
+    if (finisher) {
+      // FRUITALITY: the head pops clean off + the body is torn apart (hidden → it "became" the gibs)
+      this._popHead(e);
+      e.group.visible = false;
+    }
     this.audio.heavy();
     if (finisher) { this.state.finishers++; this._floater(e.def.finisher || 'FRUITALITY!', o.clone().setY(3), '#e13c5a'); }
   }
@@ -305,7 +369,7 @@ export class Orchard {
     for (const e of this.state.enemies) { if (e.dying) continue; if (e.hp / e.maxHp > (this.spec.combat.finisherThreshold ?? 0.16)) continue; const dd = e.group.position.distanceTo(P); if (dd < st.reach * 1.7 && dd < best) { best = dd; target = e; } }
     if (!target) return;
     this._addCombo(this.spec.combat.pointsFinisher ?? 70);
-    this.state.hitPause = 0.5; this.state.slowmo = 0.95; this.state.flash = 0.65; this._shake(0.26, 0.55);
+    this.state.hitPause = 0.5; this.state.slowmo = 0.95; this.state.flash = 0.4; this._shake(0.26, 0.55);
     this.audio.finisher();
     this._camFinisher(target.group.position.clone());
     const dir = P.clone().sub(target.group.position).setY(0).normalize();
@@ -413,6 +477,34 @@ export class Orchard {
     // particles
     for (const p of this.state.parts) { p.p.addScaledVector(p.v, dt); p.v.y -= p.g * dt; p.v.multiplyScalar(Math.pow(0.4, dt)); p.life -= dt; }
     this.state.parts = this.state.parts.filter(p => p.life > 0); if (this.state.parts.length > this.MAXP) this.state.parts.splice(0, this.state.parts.length - this.MAXP);
+
+    // gore chunks — gravity, spin, floor bounce, then fade
+    for (const g of this.state.gibs) {
+      g.life -= dt;
+      if (!g.rest) {
+        g.v.y -= 20 * dt;
+        g.mesh.position.addScaledVector(g.v, dt);
+        g.mesh.rotation.x += g.av.x * dt; g.mesh.rotation.y += g.av.y * dt; g.mesh.rotation.z += g.av.z * dt;
+        const floorY = g.size * 0.5;
+        if (g.mesh.position.y <= floorY) {
+          g.mesh.position.y = floorY;
+          if (g.v.y < -1.2) { g.v.y *= -0.36; g.v.x *= 0.55; g.v.z *= 0.55; g.av.multiplyScalar(0.45); }
+          else { g.v.set(0, 0, 0); g.rest = true; }
+        }
+      }
+      if (g.life < 0.7) g.mesh.scale.setScalar(g.size * Math.max(0.001, g.life / 0.7));
+    }
+    for (const g of this.state.gibs) if (g.life <= 0) this.scene.remove(g.mesh);
+    this.state.gibs = this.state.gibs.filter(g => g.life > 0);
+    // juice puddles — grow, fade in then out
+    for (const pu of this.state.puddles) {
+      pu.life -= dt;
+      pu.mesh.scale.setScalar(lerp(pu.mesh.scale.x, pu.target, 1 - Math.pow(0.02, dt)));
+      const age = pu.max - pu.life;
+      pu.mesh.material.opacity = age < 0.4 ? pu.op * (age / 0.4) : (pu.life < 1.6 ? pu.op * (pu.life / 1.6) : pu.op);
+    }
+    for (const pu of this.state.puddles) if (pu.life <= 0) this.scene.remove(pu.mesh);
+    this.state.puddles = this.state.puddles.filter(p => p.life > 0);
     for (const f of this.state.floaters) { f.pos.y += dt * 1.2; f.life -= dt; }
     this.state.floaters = this.state.floaters.filter(f => f.life > 0);
     this.emit('floaters', this.state.floaters, this.camera);
@@ -440,7 +532,7 @@ export class Orchard {
       this.camera.lookAt(look);
     }
     this.grade.uniforms.flash.value = this.state.flash;
-    this.bloom.strength = 0.3 + (this.state.combo.rank === 'JUICEMASTER' ? 0.3 : 0) + this.state.flash * 0.9;
+    this.bloom.strength = 0.3 + (this.state.combo.rank === 'JUICEMASTER' ? 0.3 : 0) + this.state.flash * 0.45;
   }
 
   _render() {
