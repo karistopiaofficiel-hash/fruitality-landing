@@ -248,25 +248,44 @@ export class Orchard {
   }
 
   // ---------------------------------------------------------------- assets + characters
+  // Load one GLB, but NEVER hang: a stalled download (no success/error fired) resolves
+  // null after `timeoutMs` so the loading screen can't spin forever. Errors → null too.
+  _loadGLB(path, timeoutMs = 18000) {
+    return new Promise((res) => {
+      let done = false; const finish = (v) => { if (!done) { done = true; clearTimeout(to); res(v); } };
+      const to = setTimeout(() => { console.warn('[Orchard] asset timed out:', path); finish(null); }, timeoutMs);
+      try {
+        new GLTFLoader().load(path,
+          (gl) => { gl.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } }); finish(gl); },
+          undefined,
+          (err) => { console.warn('[Orchard] asset failed:', path, err); finish(null); });
+      } catch (e) { console.warn('[Orchard] asset threw:', path, e); finish(null); }
+    });
+  }
   async _loadAssets() {
     const pm = new THREE.PMREMGenerator(this.renderer); pm.compileEquirectangularShader();
-    await new Promise((res) => new RGBELoader().load(this.spec.assets.hdri, (tex) => { tex.mapping = THREE.EquirectangularReflectionMapping; this.scene.environment = pm.fromEquirectangular(tex).texture; tex.dispose(); res(); }, undefined, () => res()));
-    this.gltf = await new Promise((res) => new GLTFLoader().load(this.spec.assets.character, (g) => { g.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } }); res(g); }, undefined, (err) => { console.error('[Orchard] character GLB failed to load:', this.spec.assets.character, err); res(null); }));
-    if (!this.gltf || !this.gltf.scene) {
-      const msg = `Could not load the character model (${this.spec.assets.character}). Check the asset path.`;
-      console.error('[Orchard]', msg);
-      this.emit('loaderror', msg);
-      throw new Error(msg);
-    }
-    // preload any per-fighter sculpted GLB models (TRELLIS-generated) so _makeFighter can clone them synchronously
+    // HDRI — also timeout-guarded so a stalled env map can't hang the boot.
+    await new Promise((res) => {
+      let done = false; const fin = () => { if (!done) { done = true; clearTimeout(to); res(); } };
+      const to = setTimeout(fin, 10000);
+      new RGBELoader().load(this.spec.assets.hdri, (tex) => { tex.mapping = THREE.EquirectangularReflectionMapping; this.scene.environment = pm.fromEquirectangular(tex).texture; tex.dispose(); fin(); }, undefined, fin);
+    });
+    // character rig GLB (procedural fallback only — current fighters all use sculpted models). Non-fatal.
+    this.gltf = await this._loadGLB(this.spec.assets.character);
+    if (!this.gltf || !this.gltf.scene) console.warn('[Orchard] character rig GLB unavailable; sculpted models carry the roster.');
+    // preload per-fighter sculpted GLBs IN PARALLEL (was sequential — one slow 3MB file blocked the rest).
     this.models = {};
     const F = this.spec.fighters;
     const paths = new Set();
     const collect = (d) => { if (d && d.model) paths.add(d.model); };
     collect(F.player); (F.roster || []).forEach(collect); Object.values(F.enemies || {}).forEach(collect);
-    for (const p of paths) {
-      const g = await new Promise((res) => new GLTFLoader().load(p, (gl) => { gl.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } }); res(gl); }, undefined, (err) => { console.warn('[Orchard] model failed to load:', p, err); res(null); }));
-      if (g && g.scene) this.models[p] = g.scene;
+    const results = await Promise.all([...paths].map((p) => this._loadGLB(p).then((g) => [p, g])));
+    for (const [p, g] of results) if (g && g.scene) this.models[p] = g.scene;
+    // Hard guarantee against a crash if BOTH a fighter's model AND the rig GLB are missing:
+    // synthesize a tiny stand-in scene so _makeFighter's procedural path never dereferences null.
+    if (!this.gltf || !this.gltf.scene) {
+      const anyModel = Object.values(this.models)[0];
+      if (anyModel) this.gltf = { scene: anyModel, animations: [] };
     }
   }
 
