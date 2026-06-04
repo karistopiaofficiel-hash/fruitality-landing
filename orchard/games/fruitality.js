@@ -26,16 +26,25 @@ export const fruitality = {
         name: 'Banana Berserker', juice: 0xf9d43a, scale: 0.95,
         stats: { hp: 50, speed: 3.0, attackCd: 1.7, reach: 1.9, damage: 6 },
       },
+      grape: {
+        name: 'Grape Goon', juice: 0x8a4fb0, scale: 0.7,
+        stats: { hp: 30, speed: 4.3, attackCd: 1.3, reach: 1.6, damage: 5 },
+      },
       lime: {
         name: 'Lime Brute', juice: 0x7bc74d, scale: 1.15,
         stats: { hp: 90, speed: 2.5, attackCd: 2.0, reach: 2.1, damage: 9 },
+      },
+      coconut: {
+        name: 'Coconut Titan', juice: 0x7a5536, scale: 1.9, bodyR: 1.15,
+        stats: { hp: 420, speed: 1.9, attackCd: 2.3, reach: 3.0, damage: 18 },
       },
     },
   },
   waves: [
     [{ type: 'banana', count: 3 }],
-    [{ type: 'banana', count: 4 }, { type: 'lime', count: 1 }],
-    [{ type: 'banana', count: 5 }, { type: 'lime', count: 2 }],
+    [{ type: 'banana', count: 3 }, { type: 'grape', count: 2 }],
+    [{ type: 'banana', count: 4 }, { type: 'lime', count: 2 }],
+    [{ type: 'grape', count: 3 }, { type: 'lime', count: 2 }, { type: 'coconut', count: 1 }],
   ],
   combat: {
     knockback: 4, hitPause: 0.07, finisherThreshold: 0.18,
