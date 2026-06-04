@@ -56,10 +56,23 @@ export class Orchard {
     this._hud = document.getElementById('hud');
     this._lastTs = performance.now();
     requestAnimationFrame((ts) => { this._lastTs = ts; this._loop(ts); });
+    this.emit('ready'); // scene renders (idle preview) until begin() is called
+  }
+  // pick a playable fighter from the roster before the fight starts
+  selectFighter(idx) {
+    const roster = this.spec.fighters.roster;
+    if (!roster || !roster[idx]) return;
+    this.spec.fighters.player = roster[idx];
+    if (this.player) this.scene.remove(this.player.group);
+    this._spawnPlayer();
+    this.emit('hp', 1);
+  }
+  // start the actual fight (waves + music). Triggered by a user gesture (fighter pick).
+  begin() {
+    if (this.state.running || this.state.finished) return;
     this.state.running = true;
-    this.audio.startMusic();
+    this.audio._resume(); this.audio.startMusic();
     this._nextWave();
-    this.emit('ready');
   }
 
   _initRenderer() {

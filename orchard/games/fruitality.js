@@ -21,6 +21,17 @@ export const fruitality = {
       finisher: 'JUICED!',
       stats: { hp: 220, speed: 7.0, attackCd: 0.32, reach: 3.6, damage: 20 },
     },
+    // playable roster (fighter-select). roster[0] === default player.
+    roster: [
+      { name: 'Wrecking Melon', juice: 0xe13c5a, stripes: true, stripeColor: 0x0c4f1c, finisher: 'JUICED!',
+        tag: 'All-rounder', stats: { hp: 220, speed: 7.0, attackCd: 0.32, reach: 3.6, damage: 20 } },
+      { name: 'Pineapple Punisher', juice: 0xf0a81e, finisher: 'PULPED!',
+        tag: 'Heavy hitter', stats: { hp: 200, speed: 6.2, attackCd: 0.40, reach: 3.9, damage: 28 } },
+      { name: 'Kiwi Slasher', juice: 0x7bbf3a, finisher: 'SHREDDED!',
+        tag: 'Speed demon', stats: { hp: 170, speed: 8.6, attackCd: 0.24, reach: 3.2, damage: 14 } },
+      { name: 'Coco Crusher', juice: 0x7a5536, bodyR: 0.92, finisher: 'CRACKED!',
+        tag: 'Juggernaut', stats: { hp: 320, speed: 5.6, attackCd: 0.46, reach: 3.6, damage: 24 } },
+    ],
     enemies: {
       banana: {
         name: 'Banana Berserker', juice: 0xf9d43a, scale: 0.95,

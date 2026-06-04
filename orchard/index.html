@@ -31,6 +31,19 @@
   .overlay kbd{font-family:ui-monospace,monospace;font-size:.82rem;padding:2px 6px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:6px;}
   .btn{padding:1rem 1.9rem;border:none;border-radius:14px;background:var(--melon);color:#fff;font-weight:800;font-size:1.05rem;cursor:pointer;box-shadow:0 12px 28px -10px rgba(225,60,90,.7);}
   .badge{display:inline-block;padding:.3rem .85rem;border:1px solid rgba(255,255,255,.18);border-radius:99px;color:var(--dim);font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:1.1rem;}
+  .pick{font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin:.2rem 0 .9rem;}
+  .roster{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center;max-width:760px;margin-bottom:1.4rem;}
+  .fcard{width:165px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:1rem .9rem;cursor:pointer;transition:transform .12s,border-color .12s,box-shadow .12s;text-align:center;}
+  .fcard:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.4);box-shadow:0 16px 36px -14px var(--c);}
+  .fcard .sw{width:54px;height:54px;border-radius:50%;margin:.1rem auto .55rem;background:radial-gradient(circle at 38% 32%,#fff6,transparent 42%),var(--c);box-shadow:0 0 22px -2px var(--c),inset 0 -6px 12px rgba(0,0,0,.35);position:relative;}
+  .fcard .sw:before,.fcard .sw:after{content:"";position:absolute;top:21px;width:7px;height:9px;border-radius:50%;background:#15101a;}
+  .fcard .sw:before{left:15px;}.fcard .sw:after{right:15px;}
+  .fcard .nm{font-weight:800;font-size:.92rem;color:#fff;}
+  .fcard .tg{font-size:.66rem;letter-spacing:.05em;color:var(--c);text-transform:uppercase;margin-bottom:.5rem;font-weight:700;}
+  .fcard .bar{display:flex;align-items:center;gap:.4rem;font-size:.6rem;color:var(--dim);margin:.18rem 0;}
+  .fcard .bar i{font-style:normal;width:26px;text-align:left;letter-spacing:.05em;}
+  .fcard .bar u{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;}
+  .fcard .bar u s{display:block;height:100%;border-radius:3px;background:var(--c);}
   #loading{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;gap:1rem;align-items:center;justify-content:center;background:#06060a;}
   .spin{width:46px;height:46px;border-radius:50%;border:4px solid rgba(255,255,255,.1);border-top-color:var(--melon);animation:s 1s linear infinite;}
   @keyframes s{to{transform:rotate(360deg);}}
@@ -73,8 +86,9 @@
   <span class="badge">Orchard engine · web 3D</span>
   <h1>FRUITALITY</h1>
   <p>Rigged fruit warriors, juicy melee, cinematic finishers — running in your browser. Built on the Orchard web-game engine.</p>
+  <div class="pick">Choose your fighter</div>
+  <div class="roster" id="roster"></div>
   <div class="controls"><kbd>WASD</kbd><span>Move</span><kbd>Space / Click</kbd><span>Attack</span><kbd>Shift</kbd><span>Dash (dodge i-frames)</span><kbd>F</kbd><span>Fruitality finisher</span><kbd>R</kbd><span>Restart</span></div>
-  <button class="btn" id="play">▶ Enter the orchard</button>
 </div>
 <div id="end" class="overlay hidden">
   <span class="badge">Run complete</span>
@@ -122,12 +136,28 @@ async function boot() {
   game = new Orchard($('g'), fruitality);
   window.__G = game;
   wireHud(game);
-  game.on('ready', () => { $('loading').style.display = 'none'; $('start').classList.remove('hidden'); });
+  game.on('ready', () => { $('loading').style.display = 'none'; buildRoster(game); $('start').classList.remove('hidden'); });
   game.on('loaderror', (msg) => { $('loading').innerHTML = `<div style="max-width:340px;text-align:center;color:#f9d43a"><div style="font-size:2rem">🍉💔</div><p style="color:#fff;margin:.8rem 0">${msg}</p><p style="color:#b8b8c4;font-size:.85rem">Reload to retry.</p></div>`; });
   // engine starts on Play to satisfy audio autoplay; preload now
   try { await game.start(); } catch (e) { console.error(e); }
 }
-$('play').onclick = () => $('start').classList.add('hidden');
+function buildRoster(g) {
+  const r = (g.spec.fighters.roster) || [];
+  const el = $('roster'); el.innerHTML = '';
+  const hx = (n) => '#' + n.toString(16).padStart(6, '0');
+  const max = { hp: 340, speed: 9, damage: 30 };
+  const pct = (v, m) => Math.round(Math.max(10, Math.min(100, v / m * 100)));
+  r.forEach((f, i) => {
+    const card = document.createElement('div');
+    card.className = 'fcard'; card.style.setProperty('--c', hx(f.juice));
+    card.innerHTML = `<div class="sw"></div><div class="nm">${f.name}</div><div class="tg">${f.tag || ''}</div>`
+      + `<div class="bar"><i>HP</i><u><s style="width:${pct(f.stats.hp, max.hp)}%"></s></u></div>`
+      + `<div class="bar"><i>SPD</i><u><s style="width:${pct(f.stats.speed, max.speed)}%"></s></u></div>`
+      + `<div class="bar"><i>PWR</i><u><s style="width:${pct(f.stats.damage, max.damage)}%"></s></u></div>`;
+    card.onclick = () => { g.selectFighter(i); g.begin(); $('start').classList.add('hidden'); };
+    el.appendChild(card);
+  });
+}
 $('again').onclick = () => location.reload();
 // touch wiring
 (function () {
