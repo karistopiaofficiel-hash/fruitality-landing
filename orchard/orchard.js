@@ -32,7 +32,7 @@ export class Orchard {
       running: false, finished: false, won: false, t: 0,
       hitPause: 0, slowmo: 0, flash: 0,
       shake: { mag: 0, t: 0 },
-      wave: 0, enemies: [], parts: [], gibs: [], puddles: [], floaters: [], fountains: [], pickups: [], waveActive: false, toSpawn: 0,
+      wave: 0, enemies: [], parts: [], gibs: [], puddles: [], floaters: [], fountains: [], pickups: [], slashes: [], waveActive: false, toSpawn: 0,
       combo: { points: 0, rank: 'None', last: -10 },
       finishers: 0,
       rage: 0, rageT: 0,        // RAMPAGE meter (0..1) + active timer (s)
@@ -552,7 +552,30 @@ export class Orchard {
     P.swing = P.heavy ? 0.34 : 0.22; P.state = 'attack';
     P.atkSide = ((P.atkSide || 0) + 1) % 2;
     P.atkAnim = 1; P.play('punch', 0.05);
+    this._slash(P, P.heavy); // bright swipe arc so the attack READS regardless of camera angle
     if (P.heavy) { this.audio.heavy(); this.audio.effort(P.voicePitch); this._shake(0.12, 0.14); this._floater('HEAVY!', P.group.position.clone().setY(4), '#ffd23c'); } else this.audio.swing();
+  }
+  // Bright additive crescent that sweeps in front of the fighter on each swing — the
+  // clearest "an attack happened" signal (the chunky models have no arms to punch with).
+  _slash(rig, heavy) {
+    if (!this._slashGeo) this._slashGeo = {
+      // wide crescents CENTERED on the fighter so the arc sweeps out past the body
+      // silhouette and reads even when attacking away from the follow-cam.
+      q: new THREE.RingGeometry(1.5, 2.7, 40, 1, -0.85, 1.7),
+      h: new THREE.RingGeometry(1.9, 3.6, 48, 1, -1.0, 2.0),
+    };
+    const base = new THREE.Color(this.spec.fighters.player.juice).lerp(new THREE.Color(0xffffff), 0.35);
+    const m = new THREE.Mesh(heavy ? this._slashGeo.h : this._slashGeo.q,
+      new THREE.MeshBasicMaterial({ color: base, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false, depthTest: false }));
+    m.renderOrder = 999;                                         // draw ON TOP — never occluded by the body
+    m.rotation.x = -Math.PI / 2;                                 // lie flat (reads from the high follow-cam)
+    m.position.copy(rig.group.position); m.position.y = 2.0;     // ride above the body so the sweep is unmistakable
+    this.scene.add(m);
+    const f = rig.facing;
+    const aim = Math.atan2(f.x, f.z);                             // open the crescent toward the facing
+    const side = rig.atkSide ? 1 : -1;
+    this.state.slashes.push({ m, t: 0, dur: heavy ? 0.26 : 0.17, side, rot0: aim - side * 0.7 });
+    m.rotation.z = aim - side * 0.7;                              // start wound-up, sweeps across
   }
   // Procedural attack for sculpted models (no skeleton): windup back -> thrust
   // forward + chomp-pitch + stretch. Reads as a body-slam/headbutt strike.
@@ -923,7 +946,8 @@ export class Orchard {
     let dt = raw;
     if (this.state.slowmo > 0) { dt *= 0.3; this.state.slowmo -= raw; }
     if (this.state.hitPause > 0) { this.state.hitPause -= raw; dt = 0; }
-    if (this.state.running) this._update(dt, raw);
+    const tsc = this.state.timeScale ?? 1; // debug/cinematic global slow-mo (1 = normal)
+    if (this.state.running) this._update(dt * tsc, raw * tsc);
     // mixers advance even during hitpause-light using raw*0.001? keep frozen on hitpause for punch impact
     this._render();
   }
@@ -1036,6 +1060,15 @@ export class Orchard {
       if (this.state.rageT <= 0) { const be = this.player.baseEmi || 0; mats.forEach(m => { if (m.emissive) { m.emissive.setHex(this.player.def.juice); m.emissiveIntensity = be; } }); this.emit('rage', 0, 0); }
       else if (Math.random() < 0.2) this.emit('rage', this.state.rage, Math.max(0, this.state.rageT));
     }
+    // attack slash arcs: sweep, expand, fade, then retire
+    for (const s of this.state.slashes) {
+      s.t += dt; const u = clamp(s.t / s.dur, 0, 1);
+      s.m.material.opacity = 0.95 * (1 - u * u);
+      s.m.scale.setScalar(0.8 + u * 0.7);
+      s.m.rotation.z = s.rot0 + s.side * (0.5 + u * 1.1); // sweep through the arc
+      if (u >= 1) this.scene.remove(s.m);
+    }
+    if (this.state.slashes.length) this.state.slashes = this.state.slashes.filter(s => s.t < s.dur);
     // juice fountains (sustained emitters)
     for (const ft of this.state.fountains) {
       ft.t -= dt; const col = new THREE.Color(ft.col);
