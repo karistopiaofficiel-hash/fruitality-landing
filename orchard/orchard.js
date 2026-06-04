@@ -383,7 +383,7 @@ export class Orchard {
     const H = (isPlayer ? 3.4 : 3.4 * (def.scale ?? 0.95));
     m.scale.setScalar(H);
     const box = new THREE.Box3().setFromObject(m); m.position.y = -box.min.y;
-    rig.group.add(m); rig.head = m; rig.bodyBaseScale = m.scale.clone();
+    rig.group.add(m); rig.head = m; rig.bodyBaseScale = m.scale.clone(); rig._footY = m.position.y;
     // gait personality + jelly-wobble spring
     const G = def.gait || {};
     rig.gait = { bob: G.bob ?? 0.12, hop: G.hop ?? 0.13, waddle: G.waddle ?? 0.12, squash: G.squash ?? 0.15, lean: G.lean ?? 0.09, freq: G.freq ?? 9, wobble: G.wobble ?? 0.4, stomp: G.stomp ?? 0.6 };
@@ -511,7 +511,21 @@ export class Orchard {
     if (this.player.atkCd > 0) return;
     const st = this.spec.fighters.player.stats;
     this.player.atkCd = st.attackCd; this.player.swing = 0.22; this.player.state = 'attack';
-    this.player.play('punch', 0.05); this.audio.swing();
+    this.player.play('punch', 0.05); this.player.atkAnim = 1; this.audio.swing();
+  }
+  // Procedural attack for sculpted models (no skeleton): windup back -> thrust
+  // forward + chomp-pitch + stretch. Reads as a body-slam/headbutt strike.
+  _attackAnim(rig, dt) {
+    rig.atkAnim -= dt / 0.24;
+    const u = clamp(1 - rig.atkAnim, 0, 1);
+    let lunge, pitch, stretch;
+    if (u < 0.28) { const w = u / 0.28; lunge = -0.28 * w; pitch = 0.22 * w; stretch = -0.09 * w; }        // windup back (anticipation)
+    else { const s = (u - 0.28) / 0.72, e = 1 - Math.pow(1 - s, 4); lunge = lerp(-0.28, 1.35, e); pitch = lerp(0.22, -0.62, e); stretch = lerp(-0.09, 0.22, e); if (s > 0.55) { const r = (s - 0.55) / 0.45; lunge *= 1 - r * 0.88; pitch *= 1 - r; stretch *= 1 - r; } } // snap forward + recover
+    rig.head.position.z = lunge * 0.8;      // thrust along facing (group is yawed to face)
+    rig.head.position.y = (rig._footY || 0) + Math.max(0, lunge) * 0.18; // slight rise on the slam
+    rig.head.rotation.x = pitch;            // chomp/headbutt pitch
+    const b = rig.bodyBaseScale; rig.head.scale.set(b.x * (1 - stretch * 0.45), b.y * (1 - stretch * 0.45), b.z * (1 + stretch));
+    if (rig.atkAnim <= 0) { rig.atkAnim = 0; rig.head.position.z = 0; rig.head.rotation.x = 0; rig.head.position.y = (rig._footY || 0); }
   }
   _resolveSwing() {
     if (this.player._swingDone) return; this.player._swingDone = true;
@@ -787,7 +801,8 @@ export class Orchard {
       // clamp arena
       const flat = P.group.position.clone(); flat.y = 0; if (flat.length() > this.arenaR - 1.5) { flat.setLength(this.arenaR - 1.5); P.group.position.x = flat.x; P.group.position.z = flat.z; }
       P.group.lookAt(P.group.position.clone().add(P.facing));
-      this._applyGait(P, dt, P.dashT > 0 ? 1.4 : (moving ? 1 : 0));
+      if (P.isModel && (P.atkAnim || 0) > 0) this._attackAnim(P, dt);
+      else this._applyGait(P, dt, P.dashT > 0 ? 1.4 : (moving ? 1 : 0));
     }
     if (P.mixer) P.mixer.update(dt);
 
@@ -808,9 +823,10 @@ export class Orchard {
       e.group.position.add(e.vel.clone().multiplyScalar(dt));
       const flat = e.group.position.clone(); flat.y = 0; if (flat.length() > this.arenaR - 1.5) { flat.setLength(this.arenaR - 1.5); e.group.position.x = flat.x; e.group.position.z = flat.z; }
       e.group.lookAt(P.group.position.x, 0.5, P.group.position.z);
-      this._applyGait(e, dt, clamp(e.vel.length() / def.speed, 0, 1.2));
+      if (e.isModel && (e.atkAnim || 0) > 0) this._attackAnim(e, dt);
+      else this._applyGait(e, dt, clamp(e.vel.length() / def.speed, 0, 1.2));
       e.atkCd -= dt;
-      if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
+      if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); e.atkAnim = 1; setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
       if (e.mixer) e.mixer.update(dt);
     }
     // remove finished-dying enemies
