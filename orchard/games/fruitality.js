@@ -22,23 +22,23 @@ export const fruitality = {
     player: {
       name: 'Wrecking Melon', juice: 0xe13c5a,
       stripes: true, stripeColor: 0x0c4f1c,
-      finisher: 'JUICED!',
+      finisher: 'JUICED!', finMove: 'slam',
       model: 'assets/models/watermelon.glb', // TRELLIS-generated sculpted fruit warrior
       gait: { hop: 0.20, waddle: 0.12, squash: 0.22, freq: 9, wobble: 0.55 },
       stats: { hp: 220, speed: 7.0, attackCd: 0.32, reach: 3.6, damage: 20 },
     },
     // playable roster (fighter-select). roster[0] === default player.
     roster: [
-      { name: 'Wrecking Melon', juice: 0xe13c5a, stripes: true, stripeColor: 0x0c4f1c, finisher: 'JUICED!',
+      { name: 'Wrecking Melon', juice: 0xe13c5a, stripes: true, stripeColor: 0x0c4f1c, finisher: 'JUICED!', finMove: 'slam',
         tag: 'All-rounder', model: 'assets/models/watermelon.glb', gait: { hop: 0.20, waddle: 0.12, squash: 0.22, freq: 9, wobble: 0.55 },
         stats: { hp: 220, speed: 7.0, attackCd: 0.32, reach: 3.6, damage: 20 } },
-      { name: 'Pineapple Punisher', juice: 0xf0a81e, finisher: 'PULPED!',
+      { name: 'Pineapple Punisher', juice: 0xf0a81e, finisher: 'PULPED!', finMove: 'press',
         tag: 'Heavy hitter', model: 'assets/models/pineapple.glb', gait: { hop: 0.08, waddle: 0.05, squash: 0.08, freq: 8, lean: 0.05, wobble: 0.18 },
         stats: { hp: 200, speed: 6.2, attackCd: 0.40, reach: 3.9, damage: 28 } },
-      { name: 'Kiwi Slasher', juice: 0x7bbf3a, finisher: 'SHREDDED!',
+      { name: 'Kiwi Slasher', juice: 0x7bbf3a, finisher: 'SHREDDED!', finMove: 'flurry',
         tag: 'Speed demon', model: 'assets/models/kiwi.glb', gait: { hop: 0.10, waddle: 0.16, squash: 0.14, freq: 14, wobble: 0.45 },
         stats: { hp: 170, speed: 8.6, attackCd: 0.24, reach: 3.2, damage: 14 } },
-      { name: 'Coco Crusher', juice: 0x7a5536, bodyR: 0.92, finisher: 'CRACKED!',
+      { name: 'Coco Crusher', juice: 0x7a5536, bodyR: 0.92, finisher: 'CRACKED!', finMove: 'crack',
         tag: 'Juggernaut', model: 'assets/models/coconut.glb', gait: { hop: 0.07, waddle: 0.20, squash: 0.10, freq: 5, lean: 0.04, wobble: 0.25, stomp: 1.0 },
         stats: { hp: 320, speed: 5.6, attackCd: 0.46, reach: 3.6, damage: 24 } },
     ],

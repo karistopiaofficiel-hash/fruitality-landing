@@ -703,16 +703,86 @@ export class Orchard {
     let target = null, best = Infinity;
     for (const e of this.state.enemies) { if (e.dying) continue; if (e.hp / e.maxHp > thr) continue; const dd = e.group.position.distanceTo(P); if (dd < st.reach * 1.8 && dd < best) { best = dd; target = e; } }
     if (!target) return;
+    if (this.state.finisher) return; // one at a time
     this._addCombo(this.spec.combat.pointsFinisher ?? 70); this._addRage(0.18);
-    this.state.hitPause = 0.5; this.state.slowmo = 0.95; this.state.flash = rip ? 0.3 : 0.22; this._shake(rip ? 0.4 : 0.26, rip ? 0.65 : 0.55);
+    this.state.hitPause = 0.08; this.state.slowmo = 1.3; this.state.flash = 0.16; // brief freeze, then slow-mo through the move
     this.audio.finisher(); this.audio.duck(800); this.audio.chirp(1.25);
     this._camFinisher(target.group.position.clone());
+    // dir points from victim -> player (player faces the OPPOSITE, toward victim)
     const dir = P.clone().sub(target.group.position).setY(0).normalize();
-    // signature finisher label per fighter; weapon name when armed
-    const label = weapon ? (weapon.type === 'mixer' ? 'BLENDED!' : 'SLICED!') : (this.spec.fighters.player.finisher || 'FRUITALITY!');
-    this._kill(target, dir, true, { rip, weapon, label });
+    const faceDir = dir.clone().multiplyScalar(-1); // player faces the victim
+    const pdef = this.player.def || this.spec.fighters.player;
+    const label = weapon ? (weapon.type === 'mixer' ? 'BLENDED!' : 'SLICED!') : (pdef.finisher || 'FRUITALITY!');
+    // signature move per fighter (overhead SLAM / body PRESS / jab FLURRY / CRACK headbutt)
+    const move = weapon ? 'slice' : (pdef.finMove || 'slam');
+    // lock the victim in place; make the player invulnerable through the sequence
+    target.atkCd = 999; target.vel.set(0, 0, 0); target._finVictim = true;
+    this.player.iFrame = 3.0; this.player.atkAnim = 0; this.player.state = 'finisher';
+    this.state.finisher = {
+      v: target, t: 0, dur: move === 'flurry' ? 1.15 : 0.95, dir, faceDir, rip, weapon, label, move,
+      struck: false, pStart: this.player.group.position.clone(),
+      vPos: target.group.position.clone(), reach: st.reach,
+    };
     this.emit('banner', weapon ? weapon.type.toUpperCase() + ' KILL' : (rampaging ? 'RIP!' : 'FRUITALITY'), weapon ? weapon.tier.toUpperCase() : '+70 STYLE');
-    if (weapon) { this.state.weapon = null; this.emit('weapon', null); }
+  }
+  // Procedural finisher choreography: seize -> wind-up -> signature STRIKE (triggers the
+  // kill/gore at the impact frame) -> recoil. Driven by RAW time so it plays through the
+  // slow-mo + hit-pause. Static sculpted models, so we animate body transforms (à la gaits).
+  _updateFinisher(raw) {
+    const f = this.state.finisher, P = this.player, v = f.v;
+    f.t += raw; const u = clamp(f.t / f.dur, 0, 1);
+    // face & close on the victim: stand a touch in front of it
+    const dirN = f.faceDir.clone(); P.facing.lerp(dirN, 0.4).normalize();
+    const standoff = 1.7;
+    const want = f.vPos.clone().addScaledVector(dirN, -standoff);
+    P.group.position.lerp(want, 1 - Math.pow(0.0001, raw)); P.group.position.y = 0;
+    P.group.lookAt(P.group.position.clone().add(P.facing));
+    const b = P.bodyBaseScale, fy = P._footY || 0;
+    let z = 0, y = 0, pitch = 0, sx = 1, sy = 1, sz = 1, roll = 0;
+    // shared anticipation envelope
+    const ease = (a, b2, t) => a + (b2 - a) * (t < 0 ? 0 : t > 1 ? 1 : (t * t * (3 - 2 * t)));
+    if (f.move === 'press') {
+      // PINEAPPLE — barge forward and crush
+      if (u < 0.35) { const t = u / 0.35; z = ease(0, -0.35, t); sy = ease(1, 1.15, t); }            // coil back
+      else if (u < 0.66) { const t = (u - 0.35) / 0.31; z = ease(-0.35, 1.7, t); y = ease(0, 0.15, t); sz = ease(1, 1.35, t); pitch = ease(0, 0.18, t); } // RAM
+      else { const t = (u - 0.66) / 0.34; z = ease(1.7, 0, t); pitch = ease(0.18, 0, t); sz = ease(1.35, 1, t); sy = ease(1.15, 1, t); }
+    } else if (f.move === 'crack') {
+      // COCONUT — rear way back then a sharp headbutt snap
+      if (u < 0.42) { const t = u / 0.42; z = ease(0, -0.5, t); pitch = ease(0, -0.18, t); y = ease(0, 0.2, t); } // big wind-up
+      else if (u < 0.6) { const t = (u - 0.42) / 0.18; z = ease(-0.5, 1.5, t); pitch = ease(-0.18, 0.28, t); y = ease(0.2, 0, t); } // SNAP
+      else { const t = (u - 0.6) / 0.4; z = ease(1.5, 0, t); pitch = ease(0.28, 0, t); }
+    } else if (f.move === 'flurry') {
+      // KIWI — fast multi-jab then a finishing lunge
+      if (u < 0.7) { const k = Math.sin(u / 0.7 * Math.PI * 5); z = Math.max(0, k) * 0.7; roll = k * 0.18; y = Math.abs(k) * 0.08; } // rapid jabs
+      else if (u < 0.82) { const t = (u - 0.7) / 0.12; z = ease(0, 1.6, t); sz = ease(1, 1.3, t); pitch = ease(0, 0.14, t); } // big finisher lunge
+      else { const t = (u - 0.82) / 0.18; z = ease(1.6, 0, t); sz = ease(1.3, 1, t); pitch = ease(0.14, 0, t); }
+    } else {
+      // SLAM (melon default + 'slice' weapon) — leap up, overhead smash down
+      if (u < 0.34) { const t = u / 0.34; z = ease(0, 0.3, t); y = ease(0, 0.7, t); sy = ease(1, 1.12, t); pitch = ease(0, -0.12, t); } // rise + slight rear
+      else if (u < 0.62) { const t = (u - 0.34) / 0.28; z = ease(0.3, 1.3, t); y = ease(0.7, 0.0, t); pitch = ease(-0.12, 0.22, t); sz = ease(1, 1.3, t); sy = ease(1.12, 0.86, t); } // SMASH down
+      else { const t = (u - 0.62) / 0.38; z = ease(1.3, 0, t); pitch = ease(0.22, 0, t); sz = ease(1.3, 1, t); sy = ease(0.86, 1, t); } // recoil
+    }
+    P.head.position.set(0, fy + y, z); P.head.rotation.set(pitch, 0, roll);
+    P.head.scale.set(b.x * sx, b.y * sy, b.z * sz);
+    // victim reacts: cower + shake until struck
+    if (!f.struck && v.head && !v.dying) {
+      const shake = Math.sin(f.t * 40) * 0.05 * (0.4 + u);
+      v.head.position.x = shake; v.head.rotation.z = shake * 2;
+      v.head.scale.set(v.bodyBaseScale.x * (1 - u * 0.08), v.bodyBaseScale.y * (1 - u * 0.06), v.bodyBaseScale.z * (1 - u * 0.08));
+    }
+    // strike frame -> trigger the kill/gore
+    if (!f.struck && u >= 0.6) {
+      f.struck = true;
+      this._kill(v, f.dir, true, { rip: f.rip, weapon: f.weapon, label: f.label });
+      this.state.hitPause = 0.07; this.state.flash = f.rip ? 0.32 : 0.24; this._shake(f.rip ? 0.5 : 0.32, 0.55);
+      this.audio.heavy(); this.audio.splat();
+      if (f.weapon) { this.state.weapon = null; this.emit('weapon', null); }
+    }
+    // done -> restore the player to a neutral pose and release control
+    if (u >= 1) {
+      P.head.position.set(0, fy, 0); P.head.rotation.set(0, 0, 0); P.head.scale.copy(b);
+      P.state = 'idle'; this.state.finisher = null;
+    }
   }
   _hurtPlayer(dmg, dir) {
     if (this.player.iFrame > 0 || this.player.dying) return;
@@ -828,7 +898,9 @@ export class Orchard {
     const camR = new THREE.Vector3().crossVectors(camF, new THREE.Vector3(0, 1, 0)).normalize();
     const world = new THREE.Vector3().addScaledVector(camR, mv.x).addScaledVector(camF, mv.z);
     const moving = world.lengthSq() > 0.001;
-    if (!P.dying) {
+    if (this.state.finisher) {
+      this._updateFinisher(raw); // cinematic move owns the player; runs on real time through slow-mo
+    } else if (!P.dying) {
       if (P.dashCd > 0) P.dashCd -= dt;
       if (P.dashT > 0 && moving) { /* keep dash dir */ } else if (moving) { world.normalize(); P.facing.lerp(world, 0.22).normalize(); }
       if (P.atkCd > 0) P.atkCd -= dt;
