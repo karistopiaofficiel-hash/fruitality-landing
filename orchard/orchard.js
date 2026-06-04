@@ -72,7 +72,12 @@ export class Orchard {
   begin() {
     if (this.state.running || this.state.finished) return;
     this.state.running = true;
-    this.audio._resume(); this.audio.startMusic();
+    this.audio._resume();
+    // real music track if the GameSpec provides one (e.g. a licensed/AI loop);
+    // else fall back to the procedural soundtrack. Ducks on finisher either way.
+    const m = this.spec.assets && this.spec.assets.music;
+    if (m) this.audio.loadMusic(m).then(ok => { if (!ok) this.audio.startMusic(); });
+    else this.audio.startMusic();
     this._nextWave();
   }
 
@@ -537,6 +542,7 @@ export class Orchard {
     if (this.state.finished) return;
     this.state.finished = true; this.state.running = false; this.state.won = won;
     this.audio.stopMusic();
+    if (won && this.spec.assets && this.spec.assets.victorySfx) this.audio.playSample(this.spec.assets.victorySfx, 0.7);
     setTimeout(() => this.emit('end', { won, rank: this.state.combo.rank, score: Math.round(this.state.combo.points), finishers: this.state.finishers }), 400);
   }
 
@@ -775,6 +781,26 @@ class SfxKit {
       }
     }, 25);
   }
-  stopMusic() { if (this._mTimer) { clearInterval(this._mTimer); this._mTimer = null; if (this.ok) { this.music.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.8); } } }
+  // one-shot sample (decoded + cached) through the sfx bus
+  async playSample(url, gain = 0.6) {
+    if (!this.ok) return; this._resume();
+    try {
+      this._samp = this._samp || {};
+      const buf = this._samp[url] || (this._samp[url] = await fetch(url).then(r => r.arrayBuffer()).then(a => this.ctx.decodeAudioData(a)));
+      const s = this.ctx.createBufferSource(); s.buffer = buf; const g = this.ctx.createGain(); g.gain.value = gain; s.connect(g).connect(this.sfx); s.start();
+    } catch (e) { }
+  }
+  // load + loop a real audio file (licensed/AI track) through the music bus
+  async loadMusic(url) {
+    if (!this.ok) return false;
+    try {
+      const buf = await fetch(url).then(r => r.arrayBuffer()).then(a => this.ctx.decodeAudioData(a));
+      this._resume();
+      const src = this.ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(this.music);
+      const t = this.ctx.currentTime; this.music.gain.setValueAtTime(0.0001, t); this.music.gain.exponentialRampToValueAtTime(0.5, t + 2.0);
+      src.start(); this._musicSrc = src; return true;
+    } catch (e) { console.warn('[music] file load failed; using procedural', e); return false; }
+  }
+  stopMusic() { if (this._mTimer) { clearInterval(this._mTimer); this._mTimer = null; } if (this._musicSrc) { try { this._musicSrc.stop(); } catch (e) { } this._musicSrc = null; } if (this.ok) { this.music.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.8); } }
   duck(ms = 400) { if (!this.ok) return; const t = this.ctx.currentTime; this.music.gain.cancelScheduledValues(t); const cur = this.music.gain.value || 0.22; this.music.gain.setValueAtTime(cur, t); this.music.gain.linearRampToValueAtTime(cur * 0.35, t + 0.04); this.music.gain.linearRampToValueAtTime(cur, t + ms / 1000); }
 }

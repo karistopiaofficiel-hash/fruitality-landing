@@ -5,6 +5,8 @@ export const fruitality = {
   assets: {
     character: 'assets/character.glb',
     hdri: 'assets/env.hdr',
+    // music: 'assets/music.mp3',      // drop a licensed/AI loop here (see MUSIC-PROMPTS.md)
+    victorySfx: 'assets/sfx/victory.wav', // Stable Audio Open (local MLX) win sting
   },
   arena: {
     radius: 24,
