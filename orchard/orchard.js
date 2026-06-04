@@ -295,6 +295,16 @@ export class Orchard {
     stem.position.set(0, 1.0, 0); body.add(stem);
     const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 6), new THREE.MeshStandardMaterial({ color: 0x3a8f2a, roughness: .6 }));
     leaf.position.set(0.16, 1.05, 0); leaf.rotation.z = -0.6; body.add(leaf);
+    // --- GAIT PERSONALITY + jelly-wobble spring (Fall-Guys-style soft-body motion) ---
+    const G = def.gait || {};
+    rig.gait = {
+      bob: G.bob ?? 0.12, hop: G.hop ?? 0.13, waddle: G.waddle ?? 0.12,
+      squash: G.squash ?? 0.15, lean: G.lean ?? 0.09, freq: G.freq ?? 9,
+      wobble: G.wobble ?? 0.4, stomp: G.stomp ?? 0.6,
+    };
+    rig.gaitPhase = Math.random() * Math.PI * 2;
+    rig.wob = 0; rig.wobV = 0; rig._lastSin = 0; // 1D squash spring (jelly jiggle)
+    rig.bodyBaseScale = body.scale.clone();
     // animation
     rig.mixer = new THREE.AnimationMixer(rig.group);
     rig.actions = {}; const clips = this.gltf.animations || [];
@@ -306,6 +316,38 @@ export class Orchard {
     rig.play = (name, fade = 0.18) => { const nx = rig.actions[name]; if (!nx || rig.cur === nx) return; nx.reset().play(); nx.setEffectiveWeight(1); if (rig.cur) rig.cur.crossFadeTo(nx, fade, false); rig.cur = nx; rig.curName = name; };
     rig.play('idle');
     return rig;
+  }
+
+  // Procedural "Fall Guys" gait layered on top of the skeletal walk: bob/hop,
+  // waddle, squash-&-stretch, lean, per-step stomp + a jelly-wobble spring.
+  // Applied AFTER group.lookAt so waddle/lean layer onto the facing.
+  _applyGait(rig, dt, speed01) {
+    if (rig.dying) return;
+    const g = rig.gait, body = rig.head, grp = rig.group;
+    const moving = speed01 > 0.05;
+    rig.gaitPhase += dt * (moving ? g.freq * (0.6 + 0.4 * speed01) : 2.2);
+    const ph = rig.gaitPhase;
+    // hop: bouncy abs-sin while moving; gentle breathing when idle
+    const hopN = moving ? Math.abs(Math.sin(ph)) : (0.5 + 0.5 * Math.sin(ph)) * 0.25;
+    grp.position.y = hopN * (moving ? g.hop : g.bob * 0.4);
+    // step landing detection -> stomp impulse into the wobble spring
+    const sinv = Math.sin(ph);
+    if (moving && rig._lastSin > 0 && sinv <= 0) { rig.wobV -= g.stomp * (0.5 + 0.5 * speed01); this._step(rig, speed01); }
+    rig._lastSin = sinv;
+    // jelly wobble spring (underdamped -> jiggle)
+    rig.wobV += (-150 * rig.wob - 13 * rig.wobV) * dt;
+    rig.wob = clamp(rig.wob + rig.wobV * dt, -0.45, 0.45);
+    // squash-&-stretch: stretch at hop apex, squash on landing, + wobble
+    const sq = (hopN - 0.5) * g.squash * (moving ? 1 : 0.4) + rig.wob;
+    const b = rig.bodyBaseScale;
+    body.scale.set(b.x * (1 - sq * 0.6), b.y * (1 + sq), b.z * (1 - sq * 0.6));
+    // waddle (side sway, half-step cadence) + lean into motion — layer onto facing
+    grp.rotateZ(Math.sin(ph * 0.5) * g.waddle * (moving ? 1 : 0.15));
+    if (moving) grp.rotateX(speed01 * g.lean);
+  }
+  _step(rig, speed01) {
+    if (this.audio) this.audio.step(rig.isPlayer || (rig.def.scale ?? 1) > 1.4);
+    if (rig.isPlayer && speed01 > 0.4) { const p = rig.group.position.clone(); p.y = 0.06; this.juice(p, 0xcdbba6, 2, 1.2, 0.35, 0.28, 6); }
   }
 
   _spawnPlayer() {
@@ -400,6 +442,7 @@ export class Orchard {
   }
   _hurt(e, dmg, dir) {
     e.hp -= dmg; e.flash = 0.18; e.vel.add(dir.clone().multiplyScalar(this.spec.combat.knockback ?? 4));
+    e.wobV = (e.wobV || 0) + 0.8; // jelly-jiggle on hit
     const o = e.group.position.clone().setY(1.4);
     this.juice(o, e.def.juice, 16, 7.5);
     this._floater(`+${dmg}`, o.clone().setY(2.2), '#fff');
@@ -440,7 +483,7 @@ export class Orchard {
   }
   _hurtPlayer(dmg, dir) {
     if (this.player.iFrame > 0 || this.player.dying) return;
-    this.player.hp -= dmg; this.player.iFrame = 0.5;
+    this.player.hp -= dmg; this.player.iFrame = 0.5; this.player.wobV = (this.player.wobV || 0) + 0.7;
     this.juice(this.player.group.position.clone().setY(1.3), this.spec.fighters.player.juice, 12, 6);
     this.audio.hurt(); this._shake(0.18, 0.22);
     if (this.player.hp <= 0) { this.player.dying = 99; this.player.play('death'); this._end(false); }
@@ -508,6 +551,7 @@ export class Orchard {
       // clamp arena
       const flat = P.group.position.clone(); flat.y = 0; if (flat.length() > this.arenaR - 1.5) { flat.setLength(this.arenaR - 1.5); P.group.position.x = flat.x; P.group.position.z = flat.z; }
       P.group.lookAt(P.group.position.clone().add(P.facing));
+      this._applyGait(P, dt, P.dashT > 0 ? 1.4 : (moving ? 1 : 0));
     }
     P.mixer.update(dt);
 
@@ -525,6 +569,7 @@ export class Orchard {
       e.group.position.add(e.vel.clone().multiplyScalar(dt));
       const flat = e.group.position.clone(); flat.y = 0; if (flat.length() > this.arenaR - 1.5) { flat.setLength(this.arenaR - 1.5); e.group.position.x = flat.x; e.group.position.z = flat.z; }
       e.group.lookAt(P.group.position.x, 0.5, P.group.position.z);
+      this._applyGait(e, dt, clamp(e.vel.length() / def.speed, 0, 1.2));
       e.atkCd -= dt;
       if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
       e.mixer.update(dt);
@@ -643,6 +688,7 @@ class SfxKit {
   heavy() { this.noise(0.16, 0.7, 1500); this.blip(120, .16, 'sawtooth', .22, -70); this.blip(60, .2, 'sine', .18, -20); }
   swing() { this.noise(0.05, 0.18, 6000, 1500); }
   dash() { this.noise(0.22, 0.32, 3500, 500); this.blip(520, .16, 'sawtooth', .06, -320); }
+  step(big) { this.noise(big ? 0.09 : 0.05, big ? 0.10 : 0.05, big ? 500 : 800); }
   hurt() { this.blip(120, .18, 'triangle', .18, -50); this.noise(0.1, 0.25, 1200); }
   finisher() { this.blip(90, .5, 'sawtooth', .28, -60); this.blip(70, .7, 'sine', .2, 240); this.noise(0.5, 0.5, 3000); setTimeout(() => { this.blip(330, .25, 'square', .12, 200); this.blip(440, .3, 'square', .1, 260); }, 90); }
   wave() { this.blip(330, .18, 'sine', .14, 180); this.blip(660, .22, 'triangle', .1, 220); }
