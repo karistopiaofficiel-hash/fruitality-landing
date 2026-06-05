@@ -434,12 +434,15 @@ export class Orchard {
       rig.mixer.addEventListener('finished', () => { if (rig.actions.idle) rig.actions.idle.reset().fadeIn(0.18).play(); });
       rig.play = (name) => {
         rig.curName = name;
-        if (name === 'punch' && rig.actions.punch) {
-          const p = rig.actions.punch;
+        if (name === 'punch') {
+          const p = (rig.heavy && rig.actions.punch_heavy) ? rig.actions.punch_heavy : rig.actions.punch;
+          if (!p) return;
+          // stop any in-flight punch so re-attacks restart cleanly
+          ['punch', 'punch_heavy'].forEach(n => { const a = rig.actions[n]; if (a && a !== p) a.stop(); });
           p.reset(); p.setLoop(THREE.LoopOnce, 1); p.clampWhenFinished = false;
-          p.timeScale = rig.heavy ? 1.5 : 2.3;                 // snap the smash to the attack cadence
-          if (rig.actions.idle) rig.actions.idle.fadeOut(0.06);
-          p.fadeIn(0.06).play();
+          p.timeScale = rig.heavy ? 1.7 : 2.5;                 // snap the smash to the attack cadence
+          if (rig.actions.idle) rig.actions.idle.fadeOut(0.05);
+          p.fadeIn(0.05).play();
           rig.wobV += 0.9;
         }
       };
