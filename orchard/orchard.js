@@ -579,8 +579,27 @@ export class Orchard {
     P.swing = P.heavy ? 0.34 : 0.22; P.state = 'attack';
     P.atkSide = ((P.atkSide || 0) + 1) % 2;
     P.atkAnim = 1; P.play('punch', 0.05);
+    this._lungeStart(P, P.heavy); // the fruit CHARGES the target — reads as an attack on a round body
     this._slash(P, P.heavy); // bright swipe arc so the attack READS regardless of camera angle
     if (P.heavy) { this.audio.heavy(); this.audio.effort(P.voicePitch); this._shake(0.12, 0.14); this._floater('HEAVY!', P.group.position.clone().setY(4), '#ffd23c'); } else this.audio.swing();
+  }
+  // Forward lunge/charge during an attack: the whole body surges at the target then
+  // snaps back. Delta-based so it composes with input movement; net displacement ~0.
+  _lungeStart(rig, heavy) {
+    rig.lungeDur = heavy ? 0.30 : 0.20;
+    rig.lungeT = rig.lungeDur;
+    rig.lungeMax = heavy ? 2.0 : 1.25;
+    rig.lungeDir = rig.facing.clone().setY(0).normalize();
+    rig._lungePrev = 0;
+  }
+  _lunge(rig, dt) {
+    if (!(rig.lungeT > 0)) return;
+    rig.lungeT -= dt;
+    const u = clamp(1 - rig.lungeT / rig.lungeDur, 0, 1);
+    const cur = Math.sin(u * Math.PI) * rig.lungeMax;          // 0 -> max -> 0 bell
+    rig.group.position.addScaledVector(rig.lungeDir, cur - (rig._lungePrev || 0));
+    rig._lungePrev = cur;
+    if (rig.lungeT <= 0) { rig.group.position.addScaledVector(rig.lungeDir, -cur); rig._lungePrev = 0; }
   }
   // Bright additive crescent that sweeps in front of the fighter on each swing — the
   // clearest "an attack happened" signal (the chunky models have no arms to punch with).
@@ -1015,6 +1034,7 @@ export class Orchard {
         if (canMove) { P.group.position.addScaledVector(world, st.speed * dt); }
         P.play(moving ? (mv.x || mv.z ? 'run' : 'idle') : 'idle', 0.15);
       }
+      this._lunge(P, dt); // attack charge (rigged fighters)
       // clamp arena
       const flat = P.group.position.clone(); flat.y = 0; if (flat.length() > this.arenaR - 1.5) { flat.setLength(this.arenaR - 1.5); P.group.position.x = flat.x; P.group.position.z = flat.z; }
       P.group.lookAt(P.group.position.clone().add(P.facing));
@@ -1062,7 +1082,8 @@ export class Orchard {
       if (e.isModel && !e.rigged && (e.atkAnim || 0) > 0) this._attackAnim(e, dt);
       else this._applyGait(e, dt, clamp(e.vel.length() / def.speed, 0, 1.2));
       e.atkCd -= dt;
-      if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); e.atkAnim = 1; e.atkSide = ((e.atkSide || 0) + 1) % 2; setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
+      if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); e.atkAnim = 1; e.atkSide = ((e.atkSide || 0) + 1) % 2; e.facing = to.clone().normalize(); this._lungeStart(e, false); setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
+      this._lunge(e, dt); // enemy attack charge (rigged)
       if (e.mixer) e.mixer.update(dt);
     }
     // FINISH prompt: fire once when an enemy first becomes executable (and clear when none are)
