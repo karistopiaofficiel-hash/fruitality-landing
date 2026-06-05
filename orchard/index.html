@@ -90,7 +90,7 @@
 <div id="hud">
   <div class="top">
     <div class="hpwrap">
-      <div class="lbl">🍉 Wrecking Melon</div><div class="bar"><div id="hp" class="fill" style="width:100%"></div></div>
+      <div class="lbl" id="pname">🍉 Wrecking Melon</div><div class="bar"><div id="hp" class="fill" style="width:100%"></div></div>
       <div class="lbl" style="margin-top:6px">⚡ Rampage <span id="ragehint"></span></div><div class="bar"><div id="rage" class="fill rage" style="width:0%"></div></div>
     </div>
     <div class="mid"><div id="rank" class="rank">—</div><div class="pts"><span id="pts">0</span> pts</div></div>
@@ -192,7 +192,7 @@ function buildRoster(g) {
       + `<div class="bar"><i>HP</i><u><s style="width:${pct(f.stats.hp, max.hp)}%"></s></u></div>`
       + `<div class="bar"><i>SPD</i><u><s style="width:${pct(f.stats.speed, max.speed)}%"></s></u></div>`
       + `<div class="bar"><i>PWR</i><u><s style="width:${pct(f.stats.damage, max.damage)}%"></s></u></div>`;
-    card.onclick = () => { g.selectFighter(i); g.begin(); $('start').classList.add('hidden'); };
+    card.onclick = () => { g.selectFighter(i); $('pname').textContent = '🍉 ' + f.name; g.begin(); $('start').classList.add('hidden'); };
     el.appendChild(card);
   });
 }
