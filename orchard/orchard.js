@@ -280,7 +280,8 @@ export class Orchard {
     const collect = (d) => { if (d && d.model) paths.add(d.model); };
     collect(F.player); (F.roster || []).forEach(collect); Object.values(F.enemies || {}).forEach(collect);
     const results = await Promise.all([...paths].map((p) => this._loadGLB(p).then((g) => [p, g])));
-    for (const [p, g] of results) if (g && g.scene) this.models[p] = g.scene;
+    this.modelAnims = {};
+    for (const [p, g] of results) if (g && g.scene) { this.models[p] = g.scene; this.modelAnims[p] = g.animations || []; }
     // Hard guarantee against a crash if BOTH a fighter's model AND the rig GLB are missing:
     // synthesize a tiny stand-in scene so _makeFighter's procedural path never dereferences null.
     if (!this.gltf || !this.gltf.scene) {
@@ -394,7 +395,10 @@ export class Orchard {
   _makeModelFighter(rig, def, isPlayer) {
     rig.isModel = true;
     rig.group = new THREE.Group();
-    const m = this.models[def.model].clone(true);
+    const anims = (this.modelAnims && this.modelAnims[def.model]) || [];
+    rig.rigged = anims.length > 0;
+    // skinned meshes MUST be cloned with SkeletonUtils (scene.clone breaks the skeleton)
+    const m = rig.rigged ? SkeletonUtils.clone(this.models[def.model]) : this.models[def.model].clone(true);
     // per-instance materials (so hit-flash emissive doesn't bleed across clones)
     const tint = new THREE.Color(def.juice); rig.bodyMats = [];
     // Per-fruit self-illumination so each reads in ITS natural color, not uniformly dark in the
@@ -421,8 +425,28 @@ export class Orchard {
     rig.gait = { bob: G.bob ?? 0.12, hop: G.hop ?? 0.13, waddle: G.waddle ?? 0.12, squash: G.squash ?? 0.15, lean: G.lean ?? 0.09, freq: G.freq ?? 9, wobble: G.wobble ?? 0.4, stomp: G.stomp ?? 0.6 };
     rig.gaitPhase = Math.random() * Math.PI * 2; rig.wob = 0; rig.wobV = 0; rig._lastSin = 0;
     rig.voicePitch = isPlayer ? 1.0 : clamp(1.55 - (def.scale ?? 0.95) * 0.42, 0.55, 1.6) * (0.92 + Math.random() * 0.16);
-    rig.mixer = null; // no skeletal animation
-    rig.play = (name) => { rig.curName = name; if (name === 'punch') rig.wobV += 0.9; }; // punch = effort squash
+    if (rig.rigged) {
+      // REAL skeletal animation (Blender-rigged GLB): idle loop + a punch SMASH clip.
+      rig.mixer = new THREE.AnimationMixer(m);
+      rig.actions = {};
+      for (const cl of anims) rig.actions[cl.name] = rig.mixer.clipAction(cl);
+      if (rig.actions.idle) { rig.actions.idle.play(); rig.curAction = rig.actions.idle; }
+      rig.mixer.addEventListener('finished', () => { if (rig.actions.idle) rig.actions.idle.reset().fadeIn(0.18).play(); });
+      rig.play = (name) => {
+        rig.curName = name;
+        if (name === 'punch' && rig.actions.punch) {
+          const p = rig.actions.punch;
+          p.reset(); p.setLoop(THREE.LoopOnce, 1); p.clampWhenFinished = false;
+          p.timeScale = rig.heavy ? 1.5 : 2.3;                 // snap the smash to the attack cadence
+          if (rig.actions.idle) rig.actions.idle.fadeOut(0.06);
+          p.fadeIn(0.06).play();
+          rig.wobV += 0.9;
+        }
+      };
+    } else {
+      rig.mixer = null; // procedural-only model
+      rig.play = (name) => { rig.curName = name; if (name === 'punch') rig.wobV += 0.9; }; // punch = effort squash
+    }
     return rig;
   }
   // procedural death for sculpted models (no skeletal 'death' clip): topple + sink + shrink
@@ -991,7 +1015,7 @@ export class Orchard {
       // clamp arena
       const flat = P.group.position.clone(); flat.y = 0; if (flat.length() > this.arenaR - 1.5) { flat.setLength(this.arenaR - 1.5); P.group.position.x = flat.x; P.group.position.z = flat.z; }
       P.group.lookAt(P.group.position.clone().add(P.facing));
-      if (P.isModel && (P.atkAnim || 0) > 0) this._attackAnim(P, dt);
+      if (P.isModel && !P.rigged && (P.atkAnim || 0) > 0) this._attackAnim(P, dt);
       else this._applyGait(P, dt, P.dashT > 0 ? 1.4 : (moving ? 1 : 0));
     }
     if (P.mixer) P.mixer.update(dt);
@@ -1032,7 +1056,7 @@ export class Orchard {
         if (d < want && d > 0.01) e.group.position.addScaledVector(s.normalize(), (want - d) * Math.min(1, dt * 8));
       }
       e.group.lookAt(P.group.position.x, 0.5, P.group.position.z);
-      if (e.isModel && (e.atkAnim || 0) > 0) this._attackAnim(e, dt);
+      if (e.isModel && !e.rigged && (e.atkAnim || 0) > 0) this._attackAnim(e, dt);
       else this._applyGait(e, dt, clamp(e.vel.length() / def.speed, 0, 1.2));
       e.atkCd -= dt;
       if (dist <= def.reach && e.atkCd <= 0) { e.atkCd = def.attackCd; e.play('punch', 0.08); e.atkAnim = 1; e.atkSide = ((e.atkSide || 0) + 1) % 2; setTimeout(() => this._hurtPlayer(def.damage, to.clone().normalize()), 250); }
