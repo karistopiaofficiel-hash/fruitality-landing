@@ -1458,6 +1458,9 @@ export class Orchard {
     this.audio.heavy(); this.audio.splat();
     if (finisher) {
       this.state.finishers++; this._floater(opts.label || e.def.finisher || 'FRUITALITY!', o.clone().setY(3), '#e13c5a');
+      // DESIGN BIBLE — executions REWARD: drink their juice (+8% max hp heal)
+      const P2 = this.player, heal = Math.round((P2.maxHp || 220) * 0.08);
+      if (P2.hp > 0 && P2.hp < P2.maxHp) { P2.hp = Math.min(P2.maxHp, P2.hp + heal); this.emit('hp', P2.hp / P2.maxHp); this._floater('+' + heal + ' JUICED UP', o.clone().setY(3.8), '#7dff8a'); }
       // chance to drop a rarity cutting weapon (more likely on a RIP)
       if (!this.state.weapon && this.state.pickups.length < 2 && Math.random() < (rip ? 0.55 : 0.32)) this._spawnPickup(e.group.position.clone());
     }
@@ -1549,7 +1552,7 @@ export class Orchard {
     const st = this.spec.fighters.player.stats, P = this.player.group.position;
     const rampaging = this.state.rageT > 0, weapon = this.state.weapon;
     const rip = rampaging || !!weapon;
-    const thr = rampaging ? 0.45 : (weapon ? 0.3 : (this.spec.combat.finisherThreshold ?? 0.16)); // easier to RIP
+    const thr = rampaging ? 0.20 : (weapon ? 0.15 : (this.spec.combat.finisherThreshold ?? 0.10)); // BIBLE: execute at 10% / 20% in Rampage / 15% armed
     let target = null, best = Infinity;
     for (const e of this.state.enemies) { if (e.dying) continue; if (e.hp / e.maxHp > thr) continue; const dd = e.group.position.distanceTo(P); if (dd < st.reach * 1.8 && dd < best) { best = dd; target = e; } }
     if (!target) return;
@@ -1846,7 +1849,7 @@ export class Orchard {
     // enemies
     // finisher discoverability: pulse-glow any enemy weak enough to EXECUTE + flag for the HUD prompt
     const _ramp = this.state.rageT > 0, _wpn = !!this.state.weapon;
-    const finThr = _ramp ? 0.45 : (_wpn ? 0.3 : (this.spec.combat.finisherThreshold ?? 0.25));
+    const finThr = _ramp ? 0.20 : (_wpn ? 0.15 : (this.spec.combat.finisherThreshold ?? 0.10)); // BIBLE thresholds (glow matches _finisher)
     const finRange = st.reach * 1.8;
     let anyFin = false;
     for (const e of this.state.enemies) {

@@ -86,7 +86,7 @@ export const fruitality = {
     [{ type: 'colossus', count: 1 }, { type: 'banana', count: 2 }, { type: 'grape', count: 2 }],   // BOSS FINALE
   ],
   combat: {
-    knockback: 4, hitPause: 0.07, finisherThreshold: 0.25,
+    knockback: 4, hitPause: 0.07, finisherThreshold: 0.10,   // DESIGN BIBLE: executions at ~10% hp (20% during Rampage)
     pointsHit: 6, pointsFinisher: 70,
     combo: [['D', 1], ['C', 28], ['B', 60], ['A', 110], ['S', 180], ['SS', 260], ['JUICEMASTER', 360]],
   },
