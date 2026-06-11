@@ -27,6 +27,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export class Orchard {
+  static BUILD = 7;   // bump per model/asset deploy — busts the browser's GLB cache
   constructor(canvas, spec) {
     this.canvas = canvas;
     this.spec = spec;
@@ -601,7 +602,9 @@ export class Orchard {
       let done = false; const finish = (v) => { if (!done) { done = true; clearTimeout(to); res(v); } };
       const to = setTimeout(() => { console.warn('[Orchard] asset timed out:', path); finish(null); }, timeoutMs);
       try {
-        new GLTFLoader().load(path,
+        // cache-bust MODELS: browsers served STALE GLBs after deploys (the page ?v= doesn't reach
+        // sub-fetches) — new warriors looked identical to old ones. Keyed to the engine build stamp.
+        new GLTFLoader().load(path + (path.includes('?') ? '&' : '?') + 'v=' + (Orchard.BUILD || 1),
           (gl) => { gl.scene.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } }); finish(gl); },
           undefined,
           (err) => { console.warn('[Orchard] asset failed:', path, err); finish(null); });
@@ -2103,7 +2106,8 @@ export class Orchard {
       // lower, closer, slightly side-kicked cam → attacks read as forward jabs (not top-down "backshot"),
       // and the framing is more heroic/cinematic. look-target raised so we look UP at the action.
       const side = 0.16; // small lateral offset for a 3/4 angle instead of dead-behind
-      const want = new THREE.Vector3(P.x - f.x * 10 + f.z * side * 10, P.y + 5.3, P.z - f.z * 10 - f.x * side * 10);
+      // BIBLE: the camera is CLOSER than Fall Guys — combat is personal (weight/impact/aggression)
+      const want = new THREE.Vector3(P.x - f.x * 8.4 + f.z * side * 8.4, P.y + 4.4, P.z - f.z * 8.4 - f.x * side * 8.4);
       this.camera.position.lerp(want, 1 - Math.pow(0.003, dt));
       const look = new THREE.Vector3(P.x + f.x * 1.6, P.y + 1.6, P.z + f.z * 1.6);
       if (this.state.shake.t > 0) { const i = this.state.shake.t / 0.5; look.x += rand(-1, 1) * this.state.shake.mag * i * 4; look.y += rand(-1, 1) * this.state.shake.mag * i * 2; }
